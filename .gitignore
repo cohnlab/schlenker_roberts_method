@@ -4,4 +4,5 @@ calendars_sacks
 calendars_sacks/
 calendars_sacks_interp/
 .ipynb_checkpoints*
+.Rhistory
 .Rproj.user
