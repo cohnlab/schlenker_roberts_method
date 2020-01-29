@@ -1,7 +1,9 @@
 xavier/
+xavier_calendars/
 xavier_computed/
 xavier_dfs/
 sheffield/
+sheffield_calendars/
 sheffield_computed/
 sheffield_dfs/
 calendars_sacks
@@ -10,3 +12,4 @@ calendars_sacks_interp/
 .ipynb_checkpoints*
 .Rhistory
 .Rproj.user
+sheffield
