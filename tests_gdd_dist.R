@@ -7,18 +7,21 @@ crop = "Soybeans"
 infname = paste0(infolder,crop,".climdata.rds")
 data = readRDS(infname)
 data$yvar = data$gdd30
+data$ngdd30 = data$gdd30/data$ndays
 # data$yvar = data$gdd30/data$ndays
 # data$yvar = log(1+data$gdd30)/data$ndays
 # data$yvar = log(1+data$gdd30/data$ndays)
 data$xvar = data$tmaxmean
 
 # fit = lm(yvar ~ xvar, data = data)
-fit = nls(gdd30 ~ 0.001 + exp(b*tmaxmean), data = data)
+fit = nls(ngdd30 ~ 1 + exp(b*tmaxmean),
+          start = c(b=10),
+          data = data)
 
 summary(fit)
 data$pred = predict(fit,data)
 
-ggplot(data, aes(x = tmaxmean, y = gdd30, fill = ndays)) +
+ggplot(data, aes(x = tmaxmean, y = ngdd30, fill = ndays)) +
   geom_point(shape = 21, colour = "#00000000") +
   scale_fill_gradientn(colors = rainbow(5)) +
   theme_classic() +
