@@ -3,8 +3,10 @@
 library(tidyverse)
 library(raster)
 
-infolder  = "xavier_computed/"
-outfolder  = "xavier_dfs/"
+infolder  = "sheffield_computed/"
+outfolder  = "sheffield_dfs/"
+
+dir.create(outfolder, showWarnings = FALSE)
 
 crops = c("Soybeans")
 years = 2000:2002
@@ -20,6 +22,9 @@ for (crop in crops) {
     tmaxmean = raster(infname, varname = "tmaxmean")
     tminmean = raster(infname, varname = "tminmean")
     precmean = raster(infname, varname = "precmean")
+    
+    trngmean = raster(infname, varname = "trngmean")
+    ndays =  raster(infname, varname = "ndays")
     
     tempdist = brick(infname, varname = "tempdist")
     tempgdds = brick(infname, varname = "tempgdds")
@@ -37,11 +42,16 @@ for (crop in crops) {
     tminmean = as.data.frame(tminmean, xy = TRUE) 
     precmean = as.data.frame(precmean, xy = TRUE)
     
+    trngmean = as.data.frame(trngmean, xy = TRUE) 
+    ndays = as.data.frame(ndays, xy = TRUE) 
+    
     ydata <- tempmean %>% 
       mutate(pid = group_indices(.,x,y)) %>%
       left_join(tmaxmean, by = c("x","y")) %>% 
       left_join(tminmean, by = c("x","y")) %>% 
       left_join(precmean, by = c("x","y")) %>%
+      left_join(trngmean, by = c("x","y")) %>% 
+      left_join(ndays, by = c("x","y")) %>% 
       left_join(tempdist, by = c("x","y")) %>% 
       left_join(tempgdds, by = c("x","y")) %>%
       na.omit()
