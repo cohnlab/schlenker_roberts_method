@@ -72,17 +72,19 @@ with(data,plot(tempmean,ngdd1030,pch='.', cex = 2.0))
 for (i in  seq(1,length(cuts)-1)) {
   part = filter(data, tempmean >= cuts[i] & tempmean <= cuts[i+1])
   fit = lm(ngdd1030 ~ tempmean, data = part)
-  part$pred = predict(fit,part)
-  with(part,lines(tempmean,pred, col="red",lwd = 2.0))
+  pdata = data.frame(tempmean = seq(cuts[i],cuts[i+1],0.1))
+  pdata$pred = predict(fit,pdata)
+  with(pdata,lines(tempmean,pred, col="red"))
 }
 
 cuts = seq(5,40,2)
-with(data,plot(tmaxmean,nedd30,pch='.', cex = 2.0))
+with(data,plot(tmaxmean,nedd30,pch='.', cex = 2.0,xlim=c(20,35),ylim=c(0,1.5)))
 for (i in  seq(1,length(cuts)-1)) {
   part = filter(data, tmaxmean >= cuts[i] & tmaxmean <= cuts[i+1])
   fit = lm(nedd30 ~ tmaxmean, data = part)
-  part$pred = predict(fit,part)
-  with(part,lines(tmaxmean,pred, col="red",lwd = 2.0))
+  pdata = data.frame(tmaxmean = seq(cuts[i],cuts[i+1],0.1))
+  pdata$pred = predict(fit,pdata)
+  with(pdata,lines(tmaxmean,pred, col="red",lwd=2.0))
 }
 
 
