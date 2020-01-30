@@ -5,20 +5,35 @@ library(raster)
 
 infolder  = "sheffield_computed/"
 outfolder  = "sheffield_dfs/"
+# infolder  = "xavier_computed/"
+# outfolder  = "xavier_dfs/"
+
+# Mask only areas with more agricultural area fraction than mskthresh
+mskfname = "cropmap/cropland2000_grid_sheffield.nc"
+mskthresh = 0.01
 
 dir.create(outfolder, showWarnings = FALSE)
 
-crops = c("Soybeans")
-years = 2000:2002
+# crops = c("Soybeans")
+# years = 2000:2002
 
+crops = c("Maize","Soybeans","Rice","Wheat")
+years = 1991:2008
+
+msk = raster(mskfname)
+msk[msk<mskthresh] <- NA
+msk[msk>mskthresh] <- 1
 
 for (crop in crops) {
-  
+  print(crop)
   allydata = data.frame()
   for (year in years) {
     infname = paste0(infolder,crop,".computed.",year,".nc")
     
     tempmean = raster(infname, varname = "tempmean")
+    # Mask just tempmean, na.omit will eliminate other cells in the join phase
+    tempmean[is.na(msk)] <- NA
+    
     tmaxmean = raster(infname, varname = "tmaxmean")
     tminmean = raster(infname, varname = "tminmean")
     precmean = raster(infname, varname = "precmean")
@@ -35,7 +50,7 @@ for (crop in crops) {
     colnames(tempdist)[-(1:2)] <- gsub("-","m",paste0("tdi",tempdistzvals))
     
     tempgdds = as.data.frame(tempgdds, xy = TRUE)
-    colnames(tempgdds)[-(1:2)] <- gsub("-","m",paste0("gdd",tempgddszvals))
+    colnames(tempgdds)[-(1:2)] <- gsub("-","m",paste0("edd",tempgddszvals))
     
     tempmean = as.data.frame(tempmean, xy = TRUE)
     tmaxmean = as.data.frame(tmaxmean, xy = TRUE) 
@@ -56,6 +71,9 @@ for (crop in crops) {
       left_join(tempgdds, by = c("x","y")) %>%
       na.omit()
     ydata$year = year
+    
+    # Actual gdds
+    ydata$gdd1030 = ydata$edd10 - ydata$edd30
     
     # Reorder the columns to get the most informative ones first
     firstvars = c("pid","x","y","year")
