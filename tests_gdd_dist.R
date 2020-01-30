@@ -9,8 +9,9 @@ infolder  = "sheffield_dfs/"
 
 crop = "Maize"
 
-# Option to filter years to tinker
-years = 2000:2002
+# Option to filter years for tinkering
+# years = 2000:2002
+years = 1991:2008
 
 infname = paste0(infolder,crop,".climdata.rds")
 data = readRDS(infname) %>% filter(year %in% years)

@@ -17,7 +17,7 @@ dir.create(outfolder, showWarnings = FALSE)
 # crops = c("Soybeans")
 # years = 2000:2002
 
-crops = c("Maize","Soybeans","Rice","Wheat")
+crops = c("Maize","Soybeans","Cotton")
 years = 1991:2008
 
 msk = raster(mskfname)
