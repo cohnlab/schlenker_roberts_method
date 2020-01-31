@@ -3,6 +3,7 @@ library(earth)
 library(segmented)
 library(gridExtra)
 library(lspline)
+library(splines)
 
 # infolder  = "xavier_dfs/"
 infolder  = "sheffield_dfs/"
@@ -11,7 +12,7 @@ crop = "Maize"
 
 # Option to filter years for tinkering
 # years = 2000:2002
-years = 1991:2008
+years = 1991:1993
 
 infname = paste0(infolder,crop,".climdata.rds")
 data = readRDS(infname) %>% filter(year %in% years)
@@ -44,18 +45,90 @@ data$ngdd1030 = data$gdd1030/data$ndays
 #             # allowed = function(degree, pred, parents, namesx) namesx[pred] != ,
 #             data = data)
 
+
 fit = segmented(lm(nedd30 ~tempmean, data = data),
                 segZ = ~tempmean,
                 psi = list(tempmean = c(20)))
 
-fit = lm(nedd30 ~ lspline(tmaxmean,seq(5,35,2)), data = data)
-with(data,plot(tmaxmean,nedd30))
+cuts = seq(9,37,2)
+
+fit = lm(nedd30 ~ lspline(tmaxmean,cuts), data = data)
+with(data,plot(tmaxmean,nedd30,pch='.', cex = 2.0))
 pdata = data.frame(tmaxmean = seq(0,50,0.1))
 pdata$pred = predict(fit,pdata)
-with(pdata,lines(tmaxmean,pred, col="red"))
+with(pdata,lines(tmaxmean,pred, col="orange",lwd=1.2))
 
 summary(fit)
 fit$coefficients
+
+cuts = seq(9,37,2)
+
+lspline_to_betas <- function(fit,cuts) {
+  vname = all.vars(formula(fit))[2]
+  betas = data.frame(
+    sta = -999,
+    en = cuts[1],
+    intr = fit$coefficients["(Intercept)"],
+    slp = fit$coefficients[2]
+  )
+  cuts = c(cuts,999) # Add a number to be the last cut
+  for (i in 2:(length(cuts))) {
+    sta = cuts[i-1]
+    en = cuts[i]
+    slp = fit$coefficients[i+1]
+    p = data.frame(sta)
+    names(p) <- vname
+    intr = predict(fit,p) - slp*sta
+    if (is.na(intr)) {
+      slp = betas$slp[i-1]
+      intr = betas$intr[i-1]
+    }
+    betas = rbind(betas,
+                  data.frame(sta=sta,en=en,intr=intr,slp=slp))
+    
+  }
+  # betas = rbind(betas,
+                # data.frame(sta=en,en=999,intr=intr,slp=slp))
+  rownames(betas) <- NULL
+  return(betas)
+}
+lspline_to_betas(fit,cuts)
+
+betas = lspline_to_betas(fit,cuts)
+
+add_full_line <- function(betas,i) {
+  pdata = seq(0,50,0.1)
+  lines(pdata,betas$intr[i] + betas$slp[i]*pdata,col='red',lwd=2.5)
+}
+
+add_part_line <- function(betas,i) {
+  pdata = seq(betas$sta[i],betas$en[i],0.1)
+  lines(pdata,betas$intr[i] + betas$slp[i]*pdata,col='green',lwd=2.0)
+}
+
+
+with(data,plot(tmaxmean,nedd30,pch='.', cex = 2.0))
+for (i in 1:nrow(betas)) {
+  add_full_line(betas,i)
+}
+for (i in 1:nrow(betas)) {
+  add_part_line(betas,i)
+}
+  
+cuts = seq(9,37,2)
+
+fit = lm(ngdd1030 ~ lspline(tempmean,cuts), data = data)
+with(data,plot(tempmean,ngdd1030,pch='.', cex = 2.0))
+pdata = data.frame(tempmean = seq(0,50,0.1))
+pdata$pred = predict(fit,pdata)
+with(pdata,lines(tempmean,pred, col="red"))
+
+betas = lspline_to_betas(fit,cuts)
+
+summary(fit)
+fit$coefficients
+
+
 
 part = filter(data, tempmean < 20)
 fit = lm(nedd30 ~ poly(tempmean,1), data = part)
@@ -79,7 +152,8 @@ for (i in  seq(1,length(cuts)-1)) {
 }
 
 cuts = seq(5,40,2)
-with(data,plot(tmaxmean,nedd30,pch='.', cex = 2.0,xlim=c(20,35),ylim=c(0,1.5)))
+# with(data,plot(tmaxmean,nedd30,pch='.', cex = 2.0,xlim=c(20,35),ylim=c(0,1.5)))
+with(data,plot(tmaxmean,nedd30,pch='.', cex = 2.0))
 for (i in  seq(1,length(cuts)-1)) {
   part = filter(data, tmaxmean >= cuts[i] & tmaxmean <= cuts[i+1])
   fit = lm(nedd30 ~ tmaxmean, data = part)
