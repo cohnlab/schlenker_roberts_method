@@ -1,5 +1,5 @@
 # This reads a set of coefficent tables and generates estimates of yield impact for various LU change levels
-Packages <- c("dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer")
+Packages <- c("Rcpp","dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer")
 lapply(Packages, library, character.only = TRUE)
 
 tempbasefname = "../AgroServYield_coefficients/Inputs_coef/Tbaseline_tmn.csv"
@@ -10,16 +10,27 @@ betasfolder = "gdd_betas/"
 # Points shapefile, reference raster and region of interest shapefile
 shpfname = "GIS/COLROW30.shp"
 reffname = "sheffield_calendars/Maize.crop.calendar.fill.nc"
-regfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
+
+iglobal = TRUE
+if (iglobal) {
+  regfname = "GIS/bbox_world.shp"
+} else {
+  regfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
+}
+
 
 # Path for output plots
-outfolder = "plots/"
+outfolder = "plots_sr_memo_global/"
 
 crops = c("Maize","Soybeans","Cotton")
 
 # Number of days in the growing season used in SR20090
-ndays = c(180,180,210)
+# ndays = c(180,180,210)
+ndays = c(120,120,120)
 names(ndays) <- crops
+
+# Cap for logY impacts, both positive and negative
+cap = 0.5
 
 # Sensitivities of log yields to GDD and EDD. Found in digitizing/traced.ods
 eddsens = c(-0.006435774107513,-0.005894686874659,-0.006753494536136)
@@ -28,21 +39,39 @@ names(eddsens) <- crops
 names(gddsens) <- crops
 
 # Effect of 1pp of LU change in maximum and mean temperatures
-luefftemp = 0.91
-luefftmax = 1.82
-  
+luefftemp = 1.57*(0.5/0.7)
+luefftmax = 3.15*(0.5/0.7)
+
+# FIXME: Fixed backgound warming.Substitute for a RCP file
+bgtemp = 0.0
+bgtmax = 0.0
+basetit = paste0("Background ",round(bgtemp),"\u00B0C warming")
+
+
 # FIXME do for a single year for now
-year = 2030
+year = 2000
 
 # Get a scenario string from the filename
 # scen = tools::file_path_sans_ext(basename(dttfname))
+scen = paste0("deltaT",bgtemp)
+
+# Output plots
+outfpref = paste0(outfolder,"/estimate_range_",scen,"_",year)
+
 
 # Output plots
 # outfpref = paste0(outfolder,"/estimate_range_",scen,"_",year)
 
 # The values of change in land use to evaluate. Fractional
-# dlus = seq(0,1,0.1)
+# dlus = c(0.00,1.00)
+# dlus = c(1.00)
 dlus = c(0.00,0.05,0.10,0.20,0.3,0.5,1.0)
+
+# Maximum number of bins in plot. More than that, it increases bin size
+maxbreaks = 30
+
+# Create output folder
+dir.create(outfolder, showWarnings = F)
 
 # Read baseline temp data
 tempbase <- read.csv(tempbasefname) %>% dplyr::select(-X)
@@ -54,8 +83,8 @@ tmaxbase = gather(tmaxbase,"Crop","tmaxbase",-ID)
 alldata <- left_join(tempbase,tmaxbase,by=c("ID","Crop"))
 
 #FIXME: Just make a placeholder for GCC changes in temp and tmax
-alldata$gccdtemp = 0.0
-alldata$gccdtmax = 0.0
+alldata$gccdtemp = bgtemp
+alldata$gccdtmax = bgtmax
 
 
 # Using Rcpp here to avoid figuring out a faster lookup in R
@@ -87,131 +116,129 @@ eval_nxdd <- function(betas,tvec) {
   return(cpp_eval_nxdd(as.matrix(betas),as.vector(tvec)))
 }
 
-# # Computes the agroserv equation using columns in a data frame
-# compute_agroserv <- function(df,dlu) {
-#   with(alldata,
-#        beta_1*(deltaT + agroservT*dlu) + 
-#          beta_2*(deltaT + agroservT*dlu)^2 + 
-#          beta_3*Tbaseline*(deltaT + agroservT*dlu) + 
-#          beta_4*Tbaseline*(deltaT + agroservT*dlu)^2 + 
-#          beta_5*AD*(deltaT + agroservT*dlu))
-# }
-# # Compute each level as a variable in the format dluX.XX
-# dluvnames = paste0("dlu",sprintf("%.2f",dlus))
-# for (i in 1:length(dlus)) {
-#   alldata[dluvnames[i]] = compute_agroserv(df,dlus[i])
-# }
-
-ludtempvnames = paste0("ludtemp",sprintf("%.2f",dlus))
-ludtmaxvnames = paste0("ludtmax",sprintf("%.2f",dlus))
-ludgddvnames = paste0("ludgdd",sprintf("%.2f",dlus))
-ludeddvnames = paste0("ludedd",sprintf("%.2f",dlus))
-for (i in 1:length(dlus)) {
-  alldata[ludtempvnames[i]] = luefftemp*dlus[i]
-  alldata[ludtmaxvnames[i]] = luefftmax*dlus[i]
-  
-  alldata[ludgddvnames[i]] = eval_nxdd(betasgdd,(alldata["tempbase"]+alldata["gccdtemp"]+alldata[ludtempvnames[i]]) ) -
-    eval_nxdd(betasgdd,alldata["tempbase"])
-    # alldata$gccdtemp + alldata[ludtempvnames[i]]
-}
-
 
 
 # Read the shapefile and the reference raster
 shp = st_read(shpfname)
 ref = raster(reffname)
 
-# FIXME Loop this
-crop = "Maize"
-# for (crop in levels(alldata$Crop)) {
-
-# Read the coefficients for the T-GDD functions
-betasedd = read.csv(paste0(betasfolder,crop,".betas.nEDD.csv"))
-betasgdd = read.csv(paste0(betasfolder,crop,".betas.nGDD.csv"))
-
-# Filter baselines for the crop of interest
-cropbasedata <-basedata %>% filter(Crop ==  crop)
-
-# FIXME Filter the year, we should be able to loop this too
-# ydata <- cropdata %>% filter(ScenYear == year)
-
-# Join with the shapefile
-yshp = left_join(shp,ydata, by = c("COLROW30" = "ID"))
-
-yrast <- rasterize(yshp, ref, field = dluvnames, fun = "last", background = NA_real_,
-                   by = NULL)
-# writeRaster(yrast,"poi.nc")
-
 # Read the relevant overlay shapefile
 reg = st_read(regfname)
 
-# levs = c("dlu0.10","dlu0.20","dlu1.00")
-# levs = c("dlu0.05","dlu0.10","dlu0.20","dlu1.00")
-# subrast = subset(yrast,levs)
-subrast = yrast
-levs = names(subrast)
 
-qmin = round(quantile(as.array(subrast),0.1, na.rm=T))
-# breaks = seq(-5,5,0.5)
-breaks = seq(qmin,-1*qmin,0.5)
-pal = brewer.pal(n = length(breaks), name = "RdBu")
-
-tit = paste0(crop, " | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
-
-plotobj <- tm_shape(subrast, bbox = reg) + 
-  tm_raster(palette = pal, breaks = breaks,
-            title = expression(paste(Delta,"Yield (%)"))) + 
-  tm_shape(reg) + tm_borders() +
-  tm_legend(legend.text.size = 1.0,
-            legend.outside = T) + 
-  tm_layout(panel.show = T, panel.labels = levs,
-            panel.label.size = 1.2,
-            main.title.position = "center", main.title = tit)
-
-# Repeating for the marginal effects
-subrast = yrast - yrast$dlu0.00
-names(subrast) <- names(yrast)
-levs = names(subrast)
-
-qmin = round(quantile(as.array(subrast),0.1, na.rm=T))
-# breaks = seq(-5,5,0.5)
-breaks = seq(qmin,-1*qmin,0.5)
-pal = brewer.pal(n = length(breaks), name = "RdBu")
-
-tit = paste0(crop, " (Marginal: X-dlu0.00) | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
-
-plotobjmarg <- tm_shape(subrast, bbox = reg) + 
-  tm_raster(palette = pal, breaks = breaks,
-            title = expression(paste(Delta,"Yield (%)"))) + 
-  tm_shape(reg) + tm_borders() +
-  tm_legend(legend.text.size = 1.0,
-            legend.outside = T) + 
-  tm_layout(panel.show = T, panel.labels = levs,
-            panel.label.size = 1.2,
-            main.title.position = "center", main.title = tit)
-
-
-# FIXME This leads to a ~100dpi png, but elements dont scale well if we just set 'res' in png()
-png(filename = paste0(outfpref,crop,".png"), width = 800, height = 500, unit = "px", pointsize = 16)
-print(plotobj)
-dev.off()
-png(filename = paste0(outfpref,crop,"_MARGINAL.png"), width = 800, height = 500, unit = "px", pointsize = 16)
-print(plotobjmarg)
-dev.off()
-# }
-
-# spplot(subset(yrast,c("dlu0.10","dlu0.20")), 
-#      xlim = c(-80,-30), ylim = c(-33.0, 10.0),
-#      )
-
-# tm_shape(subrast, bbox = reg) + 
-#   tm_raster(palette = "RdBu", n = 9, midpoint = 0.0) + 
-#   tm_shape(reg) + tm_borders()
-# plotobj <- tm_shape(subrast) + 
-#   tm_raster(palette = pal, breaks = breaks,
-#             title = expression(paste(Delta,"Yield (%)"))) +
-#   tm_legend(legend.text.size = 1.0,
-#             legend.outside = T) + 
-#   tm_layout(panel.show = T, panel.labels = levs,
-#             panel.label.size = 1.2,
-#             main.title.position = "center", main.title = tit)
+# FIXME Loop this
+# crop = "Soybeans"
+for (crop in crops) {
+  
+  # Read the crop-specific coefficients for the T-GDD functions
+  betasedd = read.csv(paste0(betasfolder,crop,".betas.nEDD.csv"))
+  betasgdd = read.csv(paste0(betasfolder,crop,".betas.nGDD.csv"))
+  
+  # Filter baselines for the crop of interest
+  cropdata <-alldata %>% filter(Crop ==  crop)
+  
+  # FIXME Filter the year, we should be able to loop this too
+  # ydata <- cropdata %>% filter(ScenYear == year)
+  ydata = cropdata
+  
+  # Here we actually apply the equations, setting variable names prepended with the different LU levels
+  ludtempvnames = paste0("ludtemp",sprintf("%.2f",dlus))
+  ludtmaxvnames = paste0("ludtmax",sprintf("%.2f",dlus))
+  ludgddvnames = paste0("dgddDLU",sprintf("%.2f",dlus))
+  ludeddvnames = paste0("deddDLU",sprintf("%.2f",dlus))
+  ludlogyvnames = paste0("dlogyDLU",sprintf("%.2f",dlus))
+  ludyppvnames = paste0("dyppDLU",sprintf("%.2f",dlus))
+  for (i in 1:length(dlus)) {
+    # Changes in temp, tmax
+    ydata[ludtempvnames[i]] = luefftemp*dlus[i]
+    ydata[ludtmaxvnames[i]] = luefftmax*dlus[i]
+    
+    # Changes in GDD, EDD, multiplying by ndays
+    ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata["gccdtemp"]+ydata[ludtempvnames[i]]) ) -
+                                eval_nxdd(betasgdd,ydata["tempbase"]))*ndays[crop]
+    ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata["gccdtmax"]+ydata[ludtmaxvnames[i]]) ) -
+                                eval_nxdd(betasedd,ydata["tmaxbase"]))*ndays[crop]
+    
+    # Apply the GDD and EDD sensitivities
+    ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+      eddsens[crop]*ydata[ludeddvnames[i]]
+    
+    #FIXME: Cap impacts at cap
+    ydata[[ludlogyvnames[i]]][ydata[[ludlogyvnames[i]]] > cap] = cap
+    ydata[[ludlogyvnames[i]]][ydata[[ludlogyvnames[i]]] < -cap] = -cap
+    
+    # Get a percent value
+    ydata[ludyppvnames[i]] = ydata[ludlogyvnames[i]]*100.0
+  }
+  
+  # Join with the shapefile
+  yshp = left_join(shp,ydata, by = c("COLROW30" = "ID"))
+  
+  yrast <- rasterize(yshp, ref, field = ludyppvnames, fun = "last", background = NA_real_,
+                     by = NULL)
+  # writeRaster(yrast,"poi.nc")
+  
+  
+  # levs = c("dlu0.10","dlu0.20","dlu1.00")
+  # levs = c("dlu0.05","dlu0.10","dlu0.20","dlu1.00")
+  # subrast = subset(yrast,levs)
+  subrast = yrast
+  levs = names(subrast)
+  
+  qmin = round(quantile(as.array(subrast),0.05, na.rm=T))
+  # breaks = seq(-5,5,0.5)
+  breaks = seq(qmin,-1*qmin,2)
+  if (length(breaks) > maxbreaks){
+    breaks = seq(qmin,-1*qmin,5)
+  }
+  pal = brewer.pal(n = length(breaks), name = "RdBu")
+  
+  # tit = paste0(crop, " | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  tit = paste0(crop, " | ", basetit," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  
+  plotobj <- tm_shape(subrast, bbox = reg) + 
+    tm_raster(palette = pal, breaks = breaks,
+              title = expression(paste(Delta,"Yield (%)"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0,
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit)
+  
+  # Repeating for the marginal effects
+  subrast = yrast - yrast$dyppDLU0.00
+  names(subrast) <- names(yrast)
+  levs = names(subrast)
+  
+  qmin = round(quantile(as.array(subrast),0.05, na.rm=T))
+  # breaks = seq(-5,5,0.5)
+  breaks = seq(qmin,-1*qmin,2)
+  if (length(breaks) > maxbreaks){
+    breaks = seq(qmin,-1*qmin,5)
+  }
+  pal = brewer.pal(n = length(breaks), name = "RdBu")
+  
+  # tit = paste0(crop, " (Marginal: X-dlu0.00) | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  tit = paste0(crop, " (Marginal: X-dlu0.00) | ", basetit ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  
+  plotobjmarg <- tm_shape(subrast, bbox = reg) + 
+    tm_raster(palette = pal, breaks = breaks,
+              title = expression(paste(Delta,"Yield (%)"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0,
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit)
+  
+  
+  # FIXME This leads to a ~100dpi png, but elements dont scale well if we just set 'res' in png()
+  png(filename = paste0(outfpref,crop,".png"), width = 800, height = 500, unit = "px", pointsize = 16)
+  print(plotobj)
+  dev.off()
+  png(filename = paste0(outfpref,crop,"_MARGINAL.png"), width = 800, height = 500, unit = "px", pointsize = 16)
+  print(plotobjmarg)
+  dev.off()
+  
+}
