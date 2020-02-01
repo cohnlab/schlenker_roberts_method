@@ -9,9 +9,13 @@ sheffield_dfs/
 calendars_sacks
 calendars_sacks/
 calendars_sacks_interp/
+apagar/
+plots_sr_memo/
+plots_sr_memo_global/
 .ipynb_checkpoints*
 .Rhistory
 .Rproj.user
 sheffield
 *.ods#
 GIS
+.RData
