@@ -1,35 +1,37 @@
 library(tidyverse)
 library(raster)
 library(sf)
-dlufname = "C:/Users/eriad/Downloads/DELTA_LUC_AGT1SSP0.CSV"
+dlufname = "C:/Users/eriad/Downloads/newAGT1_DeltaLUCs.csv"
 shpfname = "GIS/COLROW30.shp"
-reffname = "calendars_sacks/Cotton.crop.calendar.fill.nc"
+reffname = "../AgroServYield_coefficients/Inputs_Tbaseline/cru_tmp.nc"
 convfname = "../AgroServYield_coefficients/Inputs_coef/grids.csv"
 
 convdata = read.csv(convfname)
 convdata$COLROW30 <- as.character(convdata$final.COLROW30)
 
-dludata = read.csv(dlufname, header = FALSE)
-names(dludata) <- c("country","cell","year","dluc")
-dludata <- left_join(dludata,convdata,by = c( "cell" = "final.ID"))
+dludata = read.csv(dlufname)
+dludata <- left_join(dludata,convdata,by = c( "ID" = "final.ID"))
 
 shp = st_read(shpfname)
 shp$COLROW30 <- as.character(shp$COLROW30)
 ref = raster(reffname)
 
-y = 2005
+# y = 2005
+# 
+# ydata <- dludata %>% filter(year == y) 
 
-ydata <- dludata %>% filter(year == y) 
-
-yshp = left_join(shp,ydata)
+shp = left_join(shp,dludata)
 # yshp = left_join(shp,ydata, by = c("COLROW30" = "final.COLROW30"))
-summary(yshp)
+summary(shp)
 
-yrast <- rasterize(yshp, ref, field = "dluc", fun = mean, background = NA_real_,
+# yrast <- rasterize(yshp, ref, field = "dluc", fun = mean, background = NA_real_,
+                   # by = NULL)
+rast <- rasterize(shp, ref, field = c("X2005","X2050"), fun = mean, background = NA_real_,
                    by = NULL)
 
-plot(yshp[c("dluc","geometry")], ylim = c(-33,10), xlim = c(-80,-30))
-plot(yrast, ylim = c(-33,10), xlim = c(-80,-30))
+
+plot(shp[c("X2050","geometry")], ylim = c(-33,10), xlim = c(-80,-30))
+plot(rast, ylim = c(-33,10), xlim = c(-80,-30))
 # # data <- data %>% 
 # data1 = filter(data,year == 2005)
 # data2 = filter(data,year == 2050)
