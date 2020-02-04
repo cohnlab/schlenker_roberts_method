@@ -11,18 +11,34 @@ betasfolder = "gdd_betas/"
 shpfname = "GIS/COLROW30.shp"
 reffname = "../AgroServYield_coefficients/Inputs_Tbaseline/cru_tmp.nc"
 
-iglobal = FALSE
+# Mask, value is set depending on whether its global below
+mskfname = "cropmap/cropland2000_grid_cru.nc"
+imask = TRUE
+
+iglobal = TRUE
 if (iglobal) {
   regfname = "GIS/bbox_world.shp"
+  globalbbox = c(-130,160,-50,65)
+  msklim = 0.001
 } else {
   regfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
+  msklim = 0.000
 }
 
 
+brmskfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
+
+
 # Path for output plots
-outfolder = "plots_sr_memo/"
+if (iglobal) {
+  outfolder = "plots_sr_memo_global/"
+} else {
+  outfolder = "plots_sr_memo/"
+}
 
 crops = c("Maize","Soybeans","Cotton")
+cropstrings = c("maize","soybean","cotton")
+names(cropstrings) <- crops
 
 # Number of days in the growing season used in SR20090
 # ndays = c(180,180,210)
@@ -65,15 +81,20 @@ outfpref = paste0(outfolder,"/estimate_range_",scen,"_",year)
 # The values of change in land use to evaluate. Fractional
 # dlus = c(0.00,1.00)
 # dlus = c(1.00)
-# dlus = c(0.00,0.05,0.10,0.20,0.3,0.5,1.0)
-dlus = c(0.00,0.05,0.10,0.20,0.3,1.0)
+dlus = c(0.0,0.3)
+# dlus = c(.00,0.05,0.10,0.20,0.3,0.5,1.0)
+# dlus = c(0.00,0.05,0.10,0.20,0.3,1.0)
+
+# Grid for arranging the plots
+gnrow = 1
+gncol = length(dlus)-1
 
 # Maximum number of bins in plot. More than that, it increases bin size
 maxbreaks = 30
 
 # Override quantile based breaks anyway
 ioverbreaks = TRUE
-overbreaks = seq(-30,30,3)
+overbreaks = seq(-30,30,5)
 
 # Create output folder
 dir.create(outfolder, showWarnings = F)
@@ -127,9 +148,30 @@ eval_nxdd <- function(betas,tvec) {
 shp = st_read(shpfname)
 ref = raster(reffname)
 
-# Read the relevant overlay shapefile
+# Read the relevant overlay shapefile, and set the bounding box to it if not global
 reg = st_read(regfname)
+if (iglobal) {
+  bbox = globalbbox
+} else {
+  bbox = reg
+}
 
+
+
+# Read the mask file
+if (imask) {
+  msk = raster(mskfname)
+  msk[msk<=msklim] <- NA
+}
+
+brshp = st_read(brmskfname)
+brshp$msk = 1
+brmsk = rasterize(brshp, ref, field = "msk", fun = mean, background = NA_real_,
+                  by = NULL)
+
+if (iglobal & imask) {
+  msk[brmsk == 1] <- 1
+}
 
 # FIXME Loop this
 # crop = "Soybeans"
@@ -181,13 +223,14 @@ for (crop in crops) {
   
   yrast <- rasterize(yshp, ref, field = ludyppvnames, fun = "last", background = NA_real_,
                      by = NULL)
-  # writeRaster(yrast,"poi.nc")
-  
+  if (imask) {
+    yrast = mask(yrast,msk)
+  }
   
   # levs = c("dlu0.10","dlu0.20","dlu1.00")
   # levs = c("dlu0.05","dlu0.10","dlu0.20","dlu1.00")
   # subrast = subset(yrast,levs)
-  subrast = yrast
+  subrast = subset(yrast,names(yrast)[-1])
   levs = names(subrast)
   
   qmin = round(quantile(as.array(subrast),0.05, na.rm=T))
@@ -205,21 +248,21 @@ for (crop in crops) {
   # tit = paste0(crop, " | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
   tit = paste0(crop, " | ", basetit," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
   
-  plotobj <- tm_shape(subrast, bbox = reg) + 
+  plotobj <- tm_shape(subrast, bbox = bbox) + 
     tm_raster(palette = pal, breaks = breaks,
               title = expression(paste(Delta,"Yield (%)"))) + 
     tm_shape(reg) + tm_borders() +
-    tm_legend(legend.text.size = 1.0,
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
               legend.outside = T) + 
-    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+    tm_layout(panel.show = F, panel.labels = paste0("dlu",dlus),
               panel.label.size = 1.2,
-              main.title.position = "center", main.title = tit) +
-    tm_facets(nrow = 2)
-  
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
   
   # Repeating for the marginal effects
   subrast = yrast - yrast$dyppDLU0.00
   names(subrast) <- names(yrast)
+  subrast = subset(subrast,names(subrast)[-1])
   levs = names(subrast)
   
   qmin = round(quantile(as.array(subrast),0.05, na.rm=T))
@@ -234,18 +277,26 @@ for (crop in crops) {
   pal = brewer.pal(n = length(breaks), name = "RdBu")
   
   # tit = paste0(crop, " (Marginal: X-dlu0.00) | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
-  tit = paste0(crop, " (Marginal) | ", basetit ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  #tit = paste0(crop, " (Marginal) | ", basetit ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  if (iglobal) {
+    tit = paste0("Impact to ", cropstrings[crop], " yield of 30 percentage point loss of native vegetation")
+    
+  } else { 
+    tit = paste0("Impact to ", cropstrings[crop], " yield of 30 percentage point loss of native vegetation - Brazil")
+    
+  }
   
-  plotobjmarg <- tm_shape(subrast, bbox = reg) + 
+  plotobjmarg <- tm_shape(subrast, bbox = bbox) + 
     tm_raster(palette = pal, breaks = breaks,
               title = expression(paste(Delta,"Yield (%)"))) + 
     tm_shape(reg) + tm_borders() +
-    tm_legend(legend.text.size = 1.0,
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
               legend.outside = T) + 
-    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+    tm_layout(panel.show = F, panel.labels = paste0("dlu",dlus),
               panel.label.size = 1.2,
-              main.title.position = "center", main.title = tit) +
-    tm_facets(nrow = 2)
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
+  
   
   
   # FIXME This leads to a ~100dpi png, but elements dont scale well if we just set 'res' in png()
