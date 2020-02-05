@@ -2,8 +2,10 @@
 Packages <- c("Rcpp","dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer")
 lapply(Packages, library, character.only = TRUE)
 
-tempbasefname = "../AgroServYield_coefficients/Inputs_coef/CRU_Sacks_Zarc/Tbaseline_tmn.csv"
-tmaxbasefname = "../AgroServYield_coefficients/Inputs_coef/CRU_Sacks_Zarc/Tbaseline_tmx.csv"
+tdbase = "CRU_Sacks_Zarc_fill"
+
+tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
+tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
 
 betasfolder = "gdd_betas/"
 
@@ -31,13 +33,15 @@ brmskfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
 
 # Path for output plots
 if (iglobal) {
-  outfolder = "plots_sr_memo_global/"
+  outfolder = paste0("plots_sr_memo_global/",tdbase,"/")
 } else {
-  outfolder = "plots_sr_memo/"
+  outfolder = paste0("plots_sr_memo/",tdbase,"/")
 }
 
-crops = c("Maize","Soybeans","Cotton")
-cropstrings = c("maize","soybean","cotton")
+# crops = c("Maize","Soybeans","Cotton")
+# cropstrings = c("maize","soybean","cotton")
+crops = c("Soybeans")
+cropstrings = c("soybean")
 names(cropstrings) <- crops
 
 # Number of days in the growing season used in SR20090
@@ -81,13 +85,21 @@ outfpref = paste0(outfolder,"/estimate_range_",scen,"_",year)
 # The values of change in land use to evaluate. Fractional
 # dlus = c(0.00,1.00)
 # dlus = c(1.00)
-dlus = c(0.0,0.3)
+# dlus = c(0.0,0.3)
+dlus = c(0.0,0.3,1.00)
 # dlus = c(.00,0.05,0.10,0.20,0.3,0.5,1.0)
 # dlus = c(0.00,0.05,0.10,0.20,0.3,1.0)
 
 # Grid for arranging the plots
-gnrow = 1
-gncol = length(dlus)-1
+if (iglobal) {
+  # gnrow = 2
+  # gncol = ceiling(length(dlus)/gnrow)
+  gnrow = length(dlus)
+  # gncol = ceiling(length(dlus)/gnrow)
+}else{
+  gnrow = 1
+  gncol = length(dlus)
+}
 
 # Maximum number of bins in plot. More than that, it increases bin size
 maxbreaks = 30
@@ -151,9 +163,9 @@ ref = raster(reffname)
 # Read the relevant overlay shapefile, and set the bounding box to it if not global
 reg = st_read(regfname)
 if (iglobal) {
-  bbox = globalbbox
+  bbox = extent(globalbbox)
 } else {
-  bbox = reg
+  bbox = extent(reg)
 }
 
 
@@ -221,8 +233,15 @@ for (crop in crops) {
   # Join with the shapefile
   yshp = left_join(shp,ydata, by = c("COLROW30" = "ID"))
   
-  yrast <- rasterize(yshp, ref, field = ludyppvnames, fun = "last", background = NA_real_,
+  # yrast <- rasterize(yshp, ref, field = ludyppvnames, fun = "last", background = NA_real_,
+                     # by = NULL)
+  
+  # Valid names to rasterize 
+  valid = c("tempbase","tmaxbase",ludtempvnames,ludtmaxvnames,ludgddvnames ,ludeddvnames, ludlogyvnames,ludyppvnames) 
+  
+  yrast <- rasterize(yshp, ref, field = valid, fun = "last", background = NA_real_,
                      by = NULL)
+  
   if (imask) {
     yrast = mask(yrast,msk)
   }
@@ -230,7 +249,8 @@ for (crop in crops) {
   # levs = c("dlu0.10","dlu0.20","dlu1.00")
   # levs = c("dlu0.05","dlu0.10","dlu0.20","dlu1.00")
   # subrast = subset(yrast,levs)
-  subrast = subset(yrast,names(yrast)[-1])
+  subrast = subset(yrast,ludyppvnames)
+  # subrast = subset(subrast,names(subrast)[-1])
   levs = names(subrast)
   
   qmin = round(quantile(as.array(subrast),0.05, na.rm=T))
@@ -254,14 +274,15 @@ for (crop in crops) {
     tm_shape(reg) + tm_borders() +
     tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
               legend.outside = T) + 
-    tm_layout(panel.show = F, panel.labels = paste0("dlu",dlus),
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
               panel.label.size = 1.2,
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
   
   # Repeating for the marginal effects
-  subrast = yrast - yrast$dyppDLU0.00
-  names(subrast) <- names(yrast)
+  subrast = subset(yrast,ludyppvnames)
+  subrast = subrast - subrast$dyppDLU0.00
+  names(subrast) <- ludyppvnames
   subrast = subset(subrast,names(subrast)[-1])
   levs = names(subrast)
   
@@ -297,6 +318,32 @@ for (crop in crops) {
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
   
+  # Other plots
+  subrast = subset(yrast,ludgddvnames)
+  tit = paste0("dGDD | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase)
+  plotdgdd <- tm_shape(subrast, bbox = bbox) + 
+    tm_raster(palette = "YlOrRd", #breaks = breaks,
+              title = expression(paste(Delta,"GDD"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
+  
+  subrast = subset(yrast,ludeddvnames)
+  tit = paste0("dEDD | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase)
+  plotdedd <- tm_shape(subrast, bbox = bbox) + 
+    tm_raster(palette = "YlOrRd", #breaks = breaks,
+      title = expression(paste(Delta,"EDD"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
   
   
   # FIXME This leads to a ~100dpi png, but elements dont scale well if we just set 'res' in png()
@@ -305,6 +352,9 @@ for (crop in crops) {
   dev.off()
   png(filename = paste0(outfpref,crop,"_MARGINAL.png"), width = 1000, height = 500, unit = "px", pointsize = 16)
   print(plotobjmarg)
+  dev.off()
+  png(filename = paste0(outfpref,crop,"_GDD.png"), width = 1500, height = 500*(length(dlus)-1), unit = "px", pointsize = 16)
+  print(tmap_arrange(plotobj,plotdgdd,plotdedd, ncol = 3))
   dev.off()
   
 }
