@@ -65,7 +65,7 @@ luefftmax = 3.15*(0.5/0.7)
 # FIXME: Fixed backgound warming.Substitute for a RCP file
 bgtemp = 1.0
 bgtmax = 1.0
-basetit = paste0("Background ",round(bgtemp),"\u00B0C warming")
+basetit = paste0("BG + ",round(bgtemp),"\u00B0C")
 
 
 # FIXME do for a single year for now
@@ -95,6 +95,7 @@ if (iglobal) {
   # gnrow = 2
   # gncol = ceiling(length(dlus)/gnrow)
   gnrow = length(dlus)
+  gncol = 1
   # gncol = ceiling(length(dlus)/gnrow)
 }else{
   gnrow = 1
@@ -266,7 +267,7 @@ for (crop in crops) {
   pal = brewer.pal(n = length(breaks), name = "RdBu")
   
   # tit = paste0(crop, " | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
-  tit = paste0(crop, " | ", basetit," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  tit = paste0("dYld | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
   
   plotobj <- tm_shape(subrast, bbox = bbox) + 
     tm_raster(palette = pal, breaks = breaks,
