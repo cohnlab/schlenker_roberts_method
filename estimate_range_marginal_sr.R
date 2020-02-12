@@ -1,13 +1,16 @@
 # This reads a set of coefficent tables and generates estimates of yield impact for various LU change levels
-Packages <- c("Rcpp","dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer")
+Packages <- c("Rcpp","dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer","classInt")
 lapply(Packages, library, character.only = TRUE)
 
-tdbase = "CRU_Sacks_Zarc_fill"
+tdbase = "Sacks_Zarc_fill_fill_120d"
 
-tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
-tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
+#FIXME FIXME OVERRIDING tdbase HERE FOR TESTING PURPOSES!
+# tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
+# tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
+tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/CRU_Sacks_Zarc_fill/Tbaseline_tmp.csv")
+tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/CRU_Sacks_Zarc_fill/Tbaseline_tmx.csv")
 
-betasfolder = "gdd_betas/"
+betasfolder = paste0("gdd_betas/",tdbase,"/")
 
 # Points shapefile, reference raster and region of interest shapefile
 shpfname = "GIS/COLROW30.shp"
@@ -38,17 +41,22 @@ if (iglobal) {
   outfolder = paste0("plots_sr_memo/",tdbase,"/")
 }
 
-# crops = c("Maize","Soybeans","Cotton")
-# cropstrings = c("maize","soybean","cotton")
-crops = c("Soybeans")
-cropstrings = c("soybean")
+crops = c("Maize","Soybeans","Cotton")
+cropstrings = c("maize","soybean","cotton")
+# crops = c("Soybeans")
+# cropstrings = c("soybean")
+# crops = c("Maize")
+# cropstrings = c("maize")
 names(cropstrings) <- crops
 
+# If true, use nGDD and nEDD scaling. Else apply coefficients directly as EDD and GDD
+irescale = FALSE
+if (irescale) {
 # Number of days in the growing season used in SR20090
 # ndays = c(180,180,210)
 ndays = c(120,120,120)
 names(ndays) <- crops
-
+}
 # Cap for logY impacts, both positive and negative
 cap = 0.5
 
@@ -213,11 +221,18 @@ for (crop in crops) {
     ydata[ludtempvnames[i]] = luefftemp*dlus[i]
     ydata[ludtmaxvnames[i]] = luefftmax*dlus[i]
     
-    # Changes in GDD, EDD, multiplying by ndays
-    ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata["gccdtemp"]+ydata[ludtempvnames[i]]) ) -
-                                eval_nxdd(betasgdd,ydata["tempbase"]))*ndays[crop]
-    ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata["gccdtmax"]+ydata[ludtmaxvnames[i]]) ) -
-                                eval_nxdd(betasedd,ydata["tmaxbase"]))*ndays[crop]
+    # Changes in GDD, EDD, multiplying by ndays if necessary
+    if (irescale) {
+      ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata["gccdtemp"]+ydata[ludtempvnames[i]]) ) -
+                                  eval_nxdd(betasgdd,ydata["tempbase"]))*ndays[crop]
+      ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata["gccdtmax"]+ydata[ludtmaxvnames[i]]) ) -
+                                  eval_nxdd(betasedd,ydata["tmaxbase"]))*ndays[crop]
+    } else {
+      ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata["gccdtemp"]+ydata[ludtempvnames[i]]) ) -
+                                  eval_nxdd(betasgdd,ydata["tempbase"]))
+      ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata["gccdtmax"]+ydata[ludtmaxvnames[i]]) ) -
+                                  eval_nxdd(betasedd,ydata["tmaxbase"]))
+    }                                  
     
     # Apply the GDD and EDD sensitivities
     ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
@@ -266,8 +281,11 @@ for (crop in crops) {
   
   pal = brewer.pal(n = length(breaks), name = "RdBu")
   
-  # tit = paste0(crop, " | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
-  tit = paste0("dYld | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  if (irescale) {
+    tit = paste0("dYld | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  } else {
+    tit = paste0("dYld | ",crop, " | ",scen, " | ",tdbase," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  }
   
   plotobj <- tm_shape(subrast, bbox = bbox) + 
     tm_raster(palette = pal, breaks = breaks,
@@ -298,14 +316,10 @@ for (crop in crops) {
   }
   pal = brewer.pal(n = length(breaks), name = "RdBu")
   
-  # tit = paste0(crop, " (Marginal: X-dlu0.00) | ", year, " in ", scen ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
-  #tit = paste0(crop, " (Marginal) | ", basetit ," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
-  if (iglobal) {
-    tit = paste0("Impact to ", cropstrings[crop], " yield of 30 percentage point loss of native vegetation")
-    
-  } else { 
-    tit = paste0("Impact to ", cropstrings[crop], " yield of 30 percentage point loss of native vegetation - Brazil")
-    
+  if (irescale) {
+    tit = paste0("dYld (Marginal) | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+  } else {
+    tit = paste0("dYld (Marginal) | ",crop, " | ",scen, " | ",tdbase," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
   }
   
   plotobjmarg <- tm_shape(subrast, bbox = bbox) + 
@@ -320,10 +334,17 @@ for (crop in crops) {
     tm_facets(nrow = gnrow, ncol = gncol)
   
   # Other plots
+  if (irescale) {
+    titsuf = paste0("ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase)
+  }else {
+    titsuf = paste0(crop, " | ",scen, " | ",tdbase)
+  }
+  
   subrast = subset(yrast,ludgddvnames)
-  tit = paste0("dGDD | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase)
+  tit = paste0("dGDD | ",titsuf)
+  breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
   plotdgdd <- tm_shape(subrast, bbox = bbox) + 
-    tm_raster(palette = "YlOrRd", #breaks = breaks,
+    tm_raster(palette = "YlOrRd", breaks = breaks,
               title = expression(paste(Delta,"GDD"))) + 
     tm_shape(reg) + tm_borders() +
     tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
@@ -334,9 +355,10 @@ for (crop in crops) {
     tm_facets(nrow = gnrow, ncol = gncol)
   
   subrast = subset(yrast,ludeddvnames)
-  tit = paste0("dEDD | ndays = ",ndays[crop]," | ",crop, " | ",scen, " | ",tdbase)
+  tit = paste0("dEDD | ",titsuf)
+  breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
   plotdedd <- tm_shape(subrast, bbox = bbox) + 
-    tm_raster(palette = "YlOrRd", #breaks = breaks,
+    tm_raster(palette = "YlOrRd", breaks = breaks,
       title = expression(paste(Delta,"EDD"))) + 
     tm_shape(reg) + tm_borders() +
     tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
@@ -359,3 +381,13 @@ for (crop in crops) {
   dev.off()
   
 }
+
+
+# breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
+# plotdgdd <- tm_shape(subrast, bbox = bbox) +
+#   tm_raster(palette = "YlOrRd", breaks = breaks,
+#             title = expression(paste(Delta,"GDD"))) +
+#   tm_shape(reg) + tm_borders() +
+#   tm_legend(legend.text.size = 1.0, legend.title.size = 1.5,
+#             legend.outside = T)
+# plotdgdd

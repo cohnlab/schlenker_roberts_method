@@ -2,9 +2,12 @@
 
 library(tidyverse)
 library(raster)
+library(sf)
 
-infolder  = "sheffield_computed/"
-outfolder  = "sheffield_dfs/"
+calname = "Sacks_ZARC_fill_fill_120d"
+
+infolder  = paste0("sheffield_computed/",calname,"/")
+outfolder  = paste0("sheffield_dfs/",calname,"/")
 # infolder  = "xavier_computed/"
 # outfolder  = "xavier_dfs/"
 
@@ -12,10 +15,12 @@ outfolder  = "sheffield_dfs/"
 mskfname = "cropmap/cropland2000_grid_sheffield.nc"
 mskthresh = 0.01
 
+zonfname = "GIS/COLROW30_K_G.shp"
+
 dir.create(outfolder, showWarnings = FALSE)
 
 # crops = c("Soybeans")
-# years = 2000:2002
+# years = 1991:1993
 
 crops = c("Maize","Soybeans","Cotton")
 years = 1991:2008
@@ -23,6 +28,14 @@ years = 1991:2008
 msk = raster(mskfname)
 msk[msk<mskthresh] <- NA
 msk[msk>mskthresh] <- 1
+
+shpzones = st_read(zonfname)
+zonemap = seq(length(levels(shpzones$Class4)))
+names(zonemap) <- levels(shpzones$Class4)
+shpzones$Class4num = zonemap[shpzones$Class4]
+invzonemap = names(zonemap)
+names(invzonemap) <- zonemap
+
 
 for (crop in crops) {
   print(crop)
@@ -33,6 +46,16 @@ for (crop in crops) {
     tempmean = raster(infname, varname = "tempmean")
     # Mask just tempmean, na.omit will eliminate other cells in the join phase
     tempmean[is.na(msk)] <- NA
+    
+    # Rasterize the maps of the zones in the first iteration
+    if ((crop == crops[1]) & (year == years[1]) ) {
+      rzones = rasterize(shpzones, tempmean, field = "Class4num", fun = "last", background = NA_real_,by = NULL)
+      dfzones = as.data.frame(rzones, xy = TRUE)
+      dfzones$zone = invzonemap[as.character(dfzones$layer)]
+      dfzones$zone[is.na(dfzones$zone)] <- "NODATA"
+      dfzones$zone = as.factor(dfzones$zone)
+      dfzones$layer <- NULL
+    }
     
     tmaxmean = raster(infname, varname = "tmaxmean")
     tminmean = raster(infname, varname = "tminmean")
@@ -60,6 +83,8 @@ for (crop in crops) {
     trngmean = as.data.frame(trngmean, xy = TRUE) 
     ndays = as.data.frame(ndays, xy = TRUE) 
     
+
+    
     ydata <- tempmean %>% 
       mutate(pid = group_indices(.,x,y)) %>%
       left_join(tmaxmean, by = c("x","y")) %>% 
@@ -69,6 +94,7 @@ for (crop in crops) {
       left_join(ndays, by = c("x","y")) %>% 
       left_join(tempdist, by = c("x","y")) %>% 
       left_join(tempgdds, by = c("x","y")) %>%
+      left_join(dfzones, by = c("x","y")) %>%
       na.omit()
     ydata$year = year
     
