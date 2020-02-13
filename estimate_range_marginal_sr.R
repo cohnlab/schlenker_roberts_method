@@ -4,11 +4,8 @@ lapply(Packages, library, character.only = TRUE)
 
 tdbase = "Sacks_Zarc_fill_fill_120d"
 
-#FIXME FIXME OVERRIDING tdbase HERE FOR TESTING PURPOSES!
-# tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
-# tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
-tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/CRU_Sacks_Zarc_fill/Tbaseline_tmp.csv")
-tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/CRU_Sacks_Zarc_fill/Tbaseline_tmx.csv")
+tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
+tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
 
 betasfolder = paste0("gdd_betas/",tdbase,"/")
 
@@ -24,14 +21,24 @@ iglobal = TRUE
 if (iglobal) {
   regfname = "GIS/bbox_world.shp"
   globalbbox = c(-130,160,-50,65)
+  # globalbbox = extent(c(230-360,300-360,25,50))
+  
   msklim = 0.001
 } else {
+  # regfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
   regfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
   msklim = 0.000
 }
 
-
 brmskfname = "GIS/EstadosBR_IBGE_LLWGS84.shp"
+
+# Should we also plot CDFs?
+iplotcdf = TRUE 
+if (iplotcdf) {
+  zonesfname = "GIS/COLROW30_K_G.shp"
+}
+
+
 
 
 # Path for output plots
@@ -41,12 +48,10 @@ if (iglobal) {
   outfolder = paste0("plots_sr_memo/",tdbase,"/")
 }
 
-crops = c("Maize","Soybeans","Cotton")
-cropstrings = c("maize","soybean","cotton")
 # crops = c("Soybeans")
 # cropstrings = c("soybean")
-# crops = c("Maize")
-# cropstrings = c("maize")
+crops = c("Maize","Soybeans","Cotton")
+cropstrings = c("maize","soybean","cotton")
 names(cropstrings) <- crops
 
 # If true, use nGDD and nEDD scaling. Else apply coefficients directly as EDD and GDD
@@ -58,6 +63,7 @@ ndays = c(120,120,120)
 names(ndays) <- crops
 }
 # Cap for logY impacts, both positive and negative
+icap = FALSE
 cap = 0.5
 
 # Sensitivities of log yields to GDD and EDD. Found in digitizing/traced.ods
@@ -67,8 +73,13 @@ names(eddsens) <- crops
 names(gddsens) <- crops
 
 # Effect of 1pp of LU change in maximum and mean temperatures
-luefftemp = 1.57*(0.5/0.7)
-luefftmax = 3.15*(0.5/0.7)
+izoneagt = TRUE
+if (izoneagt) {
+  agtfname = "../AgroServYield_coefficients/Resulting_tables/Feb7/agroservT.csv"
+} else {
+  luefftemp = 1.57*(0.5/0.7)
+  luefftmax = 3.15*(0.5/0.7)
+}
 
 # FIXME: Fixed backgound warming.Substitute for a RCP file
 bgtemp = 1.0
@@ -94,7 +105,9 @@ outfpref = paste0(outfolder,"/estimate_range_",scen,"_",year)
 # dlus = c(0.00,1.00)
 # dlus = c(1.00)
 # dlus = c(0.0,0.3)
-dlus = c(0.0,0.3,1.00)
+# dlus = c(0.0,0.3,1.00)
+dlus = c(0.0,0.25,0.5,1.0)
+# dlus = c(0.0)
 # dlus = c(.00,0.05,0.10,0.20,0.3,0.5,1.0)
 # dlus = c(0.00,0.05,0.10,0.20,0.3,1.0)
 
@@ -115,14 +128,16 @@ maxbreaks = 30
 
 # Override quantile based breaks anyway
 ioverbreaks = TRUE
-overbreaks = seq(-30,30,5)
+# overbreaks = seq(-30,30,5)
+overbreaks = seq(-50,50,5)
+# overbreaks = seq(-100,100,10)
 
 # Create output folder
 dir.create(outfolder, showWarnings = F)
 
 # Read baseline temp data
-tempbase <- read.csv(tempbasefname) %>% dplyr::select(-X)
-tmaxbase = read.csv(tmaxbasefname) %>% dplyr::select(-X)
+tempbase <- read.csv(tempbasefname) #%>% dplyr::select(-X)
+tmaxbase = read.csv(tmaxbasefname) #%>% dplyr::select(-X)
 
 # Make it long in respect to crops and join them
 tempbase = gather(tempbase,"Crop","tempbase",-ID)
@@ -133,6 +148,16 @@ alldata <- left_join(tempbase,tmaxbase,by=c("ID","Crop"))
 alldata$gccdtemp = bgtemp
 alldata$gccdtmax = bgtmax
 
+# Reag AGT coefficient for Tmean, and build ones for Tmax
+if (izoneagt) {
+  agtdata = read.csv(agtfname)
+  agtdata <- spread(agtdata,"PARAMETER","Value")
+  names(agtdata)[names(agtdata) == "agroservT"] <- "AGTtmp"
+  agtdata$AGTtmx = agtdata$AGTtmp*2.0
+  
+  # Join them to alldata
+  alldata <- left_join(alldata,agtdata,by=c("ID"))
+}
 
 # Using Rcpp here to avoid figuring out a faster lookup in R
 # Evaluete a nEDD or nGDD function at a given T(max,mean)
@@ -194,6 +219,24 @@ if (iglobal & imask) {
   msk[brmsk == 1] <- 1
 }
 
+if (iplotcdf) {
+  zonesshp = st_read(zonesfname)
+  zonesshp$zonename <- NA
+  zonesshp$zonecode <- NA
+  zonesshp$zonename[zonesshp$Class4 == "warm temperate"] <- "TEMP"
+  zonesshp$zonename[zonesshp$Class4 == "equatorial"] <- "EQUA"
+  zonesshp$zonename[zonesshp$Class4 == "arid"] <- "ARID"
+  zonesshp$zonecode[zonesshp$Class4 == "warm temperate"] <- 1
+  zonesshp$zonecode[zonesshp$Class4 == "equatorial"] <- 2
+  zonesshp$zonecode[zonesshp$Class4 == "arid"] <- 3
+  zonecodes = c(1,2,3)
+  names(zonecodes) = c("TEMP","EQUA","ARID")
+  
+  zones = rasterize(zonesshp, ref, field = "zonecode", fun = mean, background = NA_real_,
+                    by = NULL)
+  
+}
+
 # FIXME Loop this
 # crop = "Soybeans"
 for (crop in crops) {
@@ -218,8 +261,13 @@ for (crop in crops) {
   ludyppvnames = paste0("dyppDLU",sprintf("%.2f",dlus))
   for (i in 1:length(dlus)) {
     # Changes in temp, tmax
-    ydata[ludtempvnames[i]] = luefftemp*dlus[i]
-    ydata[ludtmaxvnames[i]] = luefftmax*dlus[i]
+    if (izoneagt) {
+      ydata[ludtempvnames[i]] = ydata$AGTtmp*dlus[i]
+      ydata[ludtmaxvnames[i]] = ydata$AGTtmx*dlus[i]
+    } else {
+      ydata[ludtempvnames[i]] = luefftemp*dlus[i]
+      ydata[ludtmaxvnames[i]] = luefftmax*dlus[i]
+    }
     
     # Changes in GDD, EDD, multiplying by ndays if necessary
     if (irescale) {
@@ -239,8 +287,10 @@ for (crop in crops) {
       eddsens[crop]*ydata[ludeddvnames[i]]
     
     #FIXME: Cap impacts at cap
-    ydata[[ludlogyvnames[i]]][ydata[[ludlogyvnames[i]]] > cap] = cap
-    ydata[[ludlogyvnames[i]]][ydata[[ludlogyvnames[i]]] < -cap] = -cap
+    if (icap) {
+      ydata[[ludlogyvnames[i]]][ydata[[ludlogyvnames[i]]] > cap] = cap
+      ydata[[ludlogyvnames[i]]][ydata[[ludlogyvnames[i]]] < -cap] = -cap
+    }
     
     # Get a percent value
     ydata[ludyppvnames[i]] = ydata[ludlogyvnames[i]]*100.0
@@ -255,7 +305,7 @@ for (crop in crops) {
   # Valid names to rasterize 
   valid = c("tempbase","tmaxbase",ludtempvnames,ludtmaxvnames,ludgddvnames ,ludeddvnames, ludlogyvnames,ludyppvnames) 
   
-  yrast <- rasterize(yshp, ref, field = valid, fun = "last", background = NA_real_,
+  yrast <- rasterize(yshp, ref, field = valid, fun = mean, background = NA_real_,
                      by = NULL)
   
   if (imask) {
@@ -340,6 +390,7 @@ for (crop in crops) {
     titsuf = paste0(crop, " | ",scen, " | ",tdbase)
   }
   
+  # dGDD
   subrast = subset(yrast,ludgddvnames)
   tit = paste0("dGDD | ",titsuf)
   breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
@@ -354,6 +405,22 @@ for (crop in crops) {
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
   
+  # dTmean
+  subrast = subset(yrast,ludtempvnames)
+  tit = paste0("dTmean | ",titsuf)
+  breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
+  plotdtmp <- tm_shape(subrast, bbox = bbox) + 
+    tm_raster(palette = "YlOrRd", breaks = breaks,
+              title = expression(paste(Delta,"Tmean"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
+  
+  #dEDD
   subrast = subset(yrast,ludeddvnames)
   tit = paste0("dEDD | ",titsuf)
   breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
@@ -368,6 +435,58 @@ for (crop in crops) {
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
   
+  # dTmax
+  subrast = subset(yrast,ludtmaxvnames)
+  tit = paste0("dTmax | ",titsuf)
+  breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
+  plotdtmx <- tm_shape(subrast, bbox = bbox) + 
+    tm_raster(palette = "YlOrRd", breaks = breaks,
+              title = expression(paste(Delta,"Tmax"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
+  
+  # CDFs
+  if (iplotcdf) {
+    png(filename = paste0(outfpref,crop,"_CDF_.png"), width = 600, height = 600, unit = "px", pointsize = 16)
+    # Force a square set of plots here
+    cdfnrow = ceiling((gnrow*gncol)/2)
+    cdfncol = ceiling((gnrow*gncol)/2)
+    par(mfrow = c(cdfnrow,cdfncol))
+    for (ludyppvname in ludyppvnames) {
+      subrast = subset(yrast,ludyppvname)
+      plot(ecdf(values(subrast)), 
+           xlab = paste0("Yield effect (%)"),
+           ylab = "CDF", main = ludyppvname,
+           cex = 0)
+      
+      zcolors = c("blue","green3","red")
+      # txt = "Min. values\n"
+      si = -5
+      title(sub=paste0("Min. values (N. <=-",(cap*100.0),")"), adj=1, line=si, font=2)
+      for (i in 1:length(zonecodes)) {
+        zonecode = zonecodes[i]
+        zcolor = zcolors[i]
+        masked = mask(subrast,zones, maskvalue = zonecode, inverse = TRUE)
+        lines(ecdf(values(masked)), 
+              cex = 0, col = zcolor)
+        minval = sprintf("%.1f",min(values(masked), na.rm = T))
+        nval = sum(!is.na(values(masked)), na.rm = T)
+        nbad = sum(values(masked) <= -(cap*100.0), na.rm = T)
+        title(sub=paste0(names(zonecode)," : ",minval, "(",nbad,")"), adj=1, line=si+i, font=2, col.sub = zcolor)
+      }
+      # title(sub=txt, adj=1, line=-2, font=2)
+    }
+    tit = paste0(crop, " | ", scen, " ", year )
+    title(tit, line = -1, outer = TRUE)
+    par(mfrow = c(1,1))
+    dev.off()
+  }
+  
   
   # FIXME This leads to a ~100dpi png, but elements dont scale well if we just set 'res' in png()
   png(filename = paste0(outfpref,crop,".png"), width = 1000, height = 500, unit = "px", pointsize = 16)
@@ -376,8 +495,11 @@ for (crop in crops) {
   png(filename = paste0(outfpref,crop,"_MARGINAL.png"), width = 1000, height = 500, unit = "px", pointsize = 16)
   print(plotobjmarg)
   dev.off()
-  png(filename = paste0(outfpref,crop,"_GDD.png"), width = 1500, height = 500*(length(dlus)-1), unit = "px", pointsize = 16)
+  png(filename = paste0(outfpref,crop,"_GDD.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
   print(tmap_arrange(plotobj,plotdgdd,plotdedd, ncol = 3))
+  dev.off()
+  png(filename = paste0(outfpref,crop,"_ALL.png"), width = 2500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
+  print(tmap_arrange(plotobj,plotdgdd,plotdtmp,plotdedd,plotdtmx, ncol = 5))
   dev.off()
   
 }
