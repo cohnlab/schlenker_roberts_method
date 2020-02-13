@@ -13,6 +13,7 @@ apagar/
 plots_sr_memo/
 plots_sr_memo_global/
 gdd_betas/
+gdd_betas/*
 .ipynb_checkpoints*
 .Rhistory
 .Rproj.user
