@@ -262,23 +262,23 @@ for (crop in crops) {
   for (i in 1:length(dlus)) {
     # Changes in temp, tmax
     if (izoneagt) {
-      ydata[ludtempvnames[i]] = ydata$AGTtmp*dlus[i]
-      ydata[ludtmaxvnames[i]] = ydata$AGTtmx*dlus[i]
+      ydata[ludtempvnames[i]] = ydata$AGTtmp*dlus[i]+ydata["gccdtemp"]
+      ydata[ludtmaxvnames[i]] = ydata$AGTtmx*dlus[i]+ydata["gccdtmax"]
     } else {
-      ydata[ludtempvnames[i]] = luefftemp*dlus[i]
-      ydata[ludtmaxvnames[i]] = luefftmax*dlus[i]
+      ydata[ludtempvnames[i]] = luefftemp*dlus[i]+ydata["gccdtemp"]
+      ydata[ludtmaxvnames[i]] = luefftmax*dlus[i]+ydata["gccdtmax"]
     }
     
     # Changes in GDD, EDD, multiplying by ndays if necessary
     if (irescale) {
-      ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata["gccdtemp"]+ydata[ludtempvnames[i]]) ) -
+      ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata[ludtempvnames[i]]) ) -
                                   eval_nxdd(betasgdd,ydata["tempbase"]))*ndays[crop]
-      ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata["gccdtmax"]+ydata[ludtmaxvnames[i]]) ) -
+      ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata[ludtmaxvnames[i]]) ) -
                                   eval_nxdd(betasedd,ydata["tmaxbase"]))*ndays[crop]
     } else {
-      ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata["gccdtemp"]+ydata[ludtempvnames[i]]) ) -
+      ydata[ludgddvnames[i]] = (eval_nxdd(betasgdd,(ydata["tempbase"]+ydata[ludtempvnames[i]]) ) -
                                   eval_nxdd(betasgdd,ydata["tempbase"]))
-      ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata["gccdtmax"]+ydata[ludtmaxvnames[i]]) ) -
+      ydata[ludeddvnames[i]] = (eval_nxdd(betasedd,(ydata["tmaxbase"]+ydata[ludtmaxvnames[i]]) ) -
                                   eval_nxdd(betasedd,ydata["tmaxbase"]))
     }                                  
     
