@@ -44,6 +44,7 @@ if (iplotcdf) {
 # Path for output plots
 if (iglobal) {
   outfolder = paste0("plots_sr_memo_global/",tdbase,"/")
+  wrtfolder = paste0("rasters_sr_memo_global/",tdbase,"/")
 } else {
   outfolder = paste0("plots_sr_memo/",tdbase,"/")
 }
@@ -82,8 +83,8 @@ if (izoneagt) {
 }
 
 # FIXME: Fixed backgound warming.Substitute for a RCP file
-bgtemp = 1.0
-bgtmax = 1.0
+bgtemp = 2.0
+bgtmax = 2.0
 basetit = paste0("BG + ",round(bgtemp),"\u00B0C")
 
 
@@ -134,6 +135,7 @@ overbreaks = seq(-50,50,5)
 
 # Create output folder
 dir.create(outfolder, showWarnings = F)
+dir.create(wrtfolder, showWarnings = F)
 
 # Read baseline temp data
 tempbase <- read.csv(tempbasefname) #%>% dplyr::select(-X)
@@ -307,6 +309,8 @@ for (crop in crops) {
   
   yrast <- rasterize(yshp, ref, field = valid, fun = mean, background = NA_real_,
                      by = NULL)
+  
+  writeRaster(yrast,paste0(wrtfolder,"/sr_",scen,"_",year,crop), overwrite = T)
   
   if (imask) {
     yrast = mask(yrast,msk)

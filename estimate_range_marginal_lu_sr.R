@@ -142,6 +142,9 @@ shp = left_join(shp,dludata)
 lurast <- rasterize(shp, ref, field = grep("X[0-9]{4}",names(shp), value = T), fun = mean, background = NA_real_,
                   by = NULL)
 
+# Read the relevant overlay shapefile
+reg = st_read(regfname)
+
 # LUC plot plot
 luplot = tm_shape(subset(lurast,paste0("X",years)), bbox = reg) + 
   tm_raster(breaks = seq(0,100,10),
@@ -150,16 +153,15 @@ luplot = tm_shape(subset(lurast,paste0("X",years)), bbox = reg) +
   tm_shape(reg) + tm_borders() +
   tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
             legend.outside = T) + 
-  tm_layout(panel.show = F, panel.labels = paste0(dlus),
+  tm_layout(panel.show = T, panel.labels = years,
             legend.format = list("text.less.than" = "<"),
             panel.label.size = 1.2,
             main.title.position = "center", main.title = "Percentage point loss of\n native vegetation relative to size of pixel",
-            main.title.size = 1.0) +
-  tm_facets(nrow = gnrow, ncol = gncol)
+            main.title.size = 1.0) #+
+  #tm_facets(nrow = gnrow, ncol = gncol)
 luplot
 
-# Read the relevant overlay shapefile
-reg = st_read(regfname)
+
 
 
 # crop = "Soybeans"
