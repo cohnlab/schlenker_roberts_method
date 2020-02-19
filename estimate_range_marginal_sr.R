@@ -83,8 +83,8 @@ if (izoneagt) {
 }
 
 # FIXME: Fixed backgound warming.Substitute for a RCP file
-bgtemp = 2.0
-bgtmax = 2.0
+bgtemp = 0.0
+bgtmax = 0.0
 basetit = paste0("BG + ",round(bgtemp),"\u00B0C")
 
 
@@ -239,6 +239,9 @@ if (iplotcdf) {
   
 }
 
+# Join all tables in a single file to be saved
+outdata = data.frame()
+
 # FIXME Loop this
 # crop = "Soybeans"
 for (crop in crops) {
@@ -300,6 +303,13 @@ for (crop in crops) {
   
   # Join with the shapefile
   yshp = left_join(shp,ydata, by = c("COLROW30" = "ID"))
+  
+  # Save to output dataframe
+  dumdata = yshp
+  dumdata$geometry <- NULL
+  dumdata$scen = scen
+  dumdata$crop = crop
+  outdata = rbind(outdata,dumdata)
   
   # yrast <- rasterize(yshp, ref, field = ludyppvnames, fun = "last", background = NA_real_,
                      # by = NULL)
@@ -508,6 +518,8 @@ for (crop in crops) {
   
 }
 
+# Write table
+write.csv(outdata,paste0(wrtfolder,"/sr_",scen,"_",year,".csv"))
 
 # breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
 # plotdgdd <- tm_shape(subrast, bbox = bbox) +
