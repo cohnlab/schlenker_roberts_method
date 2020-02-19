@@ -13,6 +13,8 @@ srcrops = c("Maize","Soybeans","Cotton")
 moscens = c("deltaTssp0","deltaT1degC","deltaT2degC")
 mocrops = c("Maize","Rice","Wheat")
 
+names(moscens) <- srscens
+
 sryear = 2000
 moyear = 2050
 
@@ -58,6 +60,8 @@ srdata = rbind(srdata,temp)
 temp$Crop = "Wheat"
 srdata = rbind(srdata,temp)
 
+srdata$method = "SR"
+
 # Read the Moore results
 modata = data.frame()
 
@@ -93,6 +97,11 @@ modata = rbind(modata,temp)
 temp$Crop = "Cotton"
 modata = rbind(modata,temp)
 
+modata$method = "Moore"
+
+
+# Bind both methods
+alldata = rbind(srdata,modata)
 
 # Read fractional area weights
 wgtdata = read.csv(wgtfname)
@@ -103,7 +112,7 @@ convdata = read.csv(convfname)
 
 wgtdata = left_join(wgtdata,convdata, by = c("ID" = "final.ID"))
 
-srdata = left_join(srdata,wgtdata, by = c("COLROW30" = "final.COLROW30", "Crop" = "Crop"))
+alldata = left_join(alldata,wgtdata, by = c("COLROW30" = "final.COLROW30", "Crop" = "Crop"))
 
 zonesshp = st_read(zonesfname)
 zonesshp$zonename <- NA
@@ -123,25 +132,46 @@ zonesdata = zonesshp[c("COLROW30","zonecode","zonename")]
 zonesdata$geometry <-NULL
 
 
-srdata = left_join(srdata,zonesdata, by = c("COLROW30"))
-srdata$Area[is.na(srdata$Area)] <- 0.0
+alldata = left_join(alldata,zonesdata, by = c("COLROW30"))
+alldata$Area[is.na(alldata$Area)] <- 0.0
+
+# Sync names of scenarios
+for (i in 1:length(moscens)) {
+  iscen = moscens[i]
+  alldata$scen[alldata$scen == iscen] <- names(iscen)
+}
+
+# Convert some factor variablx`es that ended up becoming characters
+alldata$COLROW30 <- as.factor(alldata$COLROW30)
+alldata$ID <- as.factor(alldata$ID)
+alldata$Country <- as.factor(alldata$Country)
+alldata$method <- as.factor(alldata$method)
+alldata$Crop <- as.factor(alldata$Crop)
+alldata$zonename <- as.factor(alldata$zonename)
+alldata$zonecode <- as.factor(alldata$zonecode)
+
+alldata$scen = droplevels(alldata$scen)
 
 # shpsrdata = left_join(zonesshp[c("geometry","COLROW30")],srdata, by = "COLROW30")
 # plot(filter(shpsrdata, Crop == "Soybeans" & scen == "deltaT0" & Area >= 0.001)[c("geometry","Area")], pch = 20)
 # write.csv(alldata,"alldata.csv", row.names = F)
 
+# Clean house, this takes up a lot of RAM
+rm(temp,tempcot,tempric,tempwht,tempsoy)
+rm(modata,srdata)
+
 
 ###############################################################
 repdata = alldata
 repdata <- filter(alldata,Area >= 0.001)
-repdata$reps = ceiling(repdata$Area/0.001)
+repdata$reps = ceiling(repdata$Area/0.002)
 repdata <- repdata[rep(row.names(repdata), repdata$reps), ]
-plot(ecdf(repdata$Area), xlim = c(0.0,0.01))
+# plot(ecdf(repdata$Area), xlim = c(0.0,0.01))
 
 crop = "Soybeans"
 # FIXME doesn't work passing crop to filter
-cropdata <- alldata %>% filter(crop == "Soybeans")
-repcropdata <- repdata %>% filter(crop == "Soybeans")
+cropdata <- alldata %>% filter(Crop == "Soybeans")
+repcropdata <- repdata %>% filter(Crop == crop)
 
 ggplot(cropdata, aes(x = dyppDLU1.00, y = scen)) + geom_density_ridges()
 ggplot(cropdata, aes(x = dyppDLU1.00, y = scen, weight = Area)) + geom_density_ridges()
@@ -165,13 +195,39 @@ ggplot(cropdata, aes(x = dyppDLU1.00)) +
   facet_grid(rows = vars(scen), cols = vars(zonename)) + 
   theme_classic()
 
+ggplot(repcropdata, aes(y = scen, x = dyld)) + geom_density_ridges() + 
+  facet_grid(rows = vars(dlu), cols = vars(method))
+
+ggplot(filter(repcropdata, method == "Moore"), aes(y = dlu, x = dyld)) +
+  facet_grid(rows = vars(scen), cols = vars(method)) 
+
 # ggplot(cropdata) + geom_density_ridges(aes(height=..density..,
 #                                            weight=Area),    
 #                                        scale= 0.95,
 #                                        stat="density") 
 
 
-ggplot(alldata, aes(x = Area, y = crop)) + geom_density_ridges()
+ggplot(filter(repcropdata, zonename != "OTHR"),
+       aes(x = dyld, y = dlu)) + 
+  facet_grid(scen + zonename ~ method) +
+  geom_density_ridges(aes(fill = zonename, alpha = 0.8), show.legend = F) +
+  theme_ridges() + 
+  labs(x = "Yield change (%)",
+       y = "Land use change (pp of whole cell)",
+       title = crop
+  )
+
+ggplot(filter(repcropdata, zonename != "OTHR"),
+       aes(x = dyld, y = dlu)) + 
+  facet_grid(scen + zonename ~ method) +
+  geom_density_ridges(aes(fill = zonename, alpha = 0.8), show.legend = F) +
+  theme_ridges() + 
+  labs(x = "Yield change (%)",
+       y = "Land use change (pp of whole cell)",
+       title = crop
+  )
+
+
 
 # 
 # theme_Publication <- function(base_size=10, base_family="Helvetica") {
