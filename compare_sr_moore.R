@@ -168,44 +168,11 @@ repdata$reps = ceiling(repdata$Area/0.002)
 repdata <- repdata[rep(row.names(repdata), repdata$reps), ]
 # plot(ecdf(repdata$Area), xlim = c(0.0,0.01))
 
-crop = "Soybeans"
+crop = "Wheat"
 # FIXME doesn't work passing crop to filter
-cropdata <- alldata %>% filter(Crop == "Soybeans")
+cropdata <- alldata %>% filter(Crop == crop)
 repcropdata <- repdata %>% filter(Crop == crop)
 
-ggplot(cropdata, aes(x = dyppDLU1.00, y = scen)) + geom_density_ridges()
-ggplot(cropdata, aes(x = dyppDLU1.00, y = scen, weight = Area)) + geom_density_ridges()
-ggplot(cropdata, aes(x = dyppDLU1.00, y = scen)) + geom_density_ridges(aes(weight = Area))
-
-ggplot(cropdata, aes(x = dyppDLU1.00)) + geom_density()
-ggplot(cropdata, aes(x = dyppDLU1.00)) + geom_density(aes(weight = Area))
-
-ggplot(cropdata, aes(x = dyppDLU1.00)) + geom_density(aes(weight = Area))
-ggplot(repcropdata, aes(x = dyppDLU1.00)) + geom_density()
-
-ggplot(cropdata, aes(group = scen, x = dyppDLU1.00)) + geom_density()
-ggplot(cropdata, aes(x = dyppDLU1.00)) + geom_density(aes(weight = Area))
-
-
-ggplot(repcropdata, aes(x = dyppDLU1.00, y = scen)) + geom_density_ridges() +
-  facet_grid(cols = vars(zonename))
-
-ggplot(cropdata, aes(x = dyppDLU1.00)) + 
-  geom_density(aes(weight = Area)) + 
-  facet_grid(rows = vars(scen), cols = vars(zonename)) + 
-  theme_classic()
-
-ggplot(repcropdata, aes(y = scen, x = dyld)) + geom_density_ridges() + 
-  facet_grid(rows = vars(dlu), cols = vars(method))
-
-ggplot(filter(repcropdata, method == "Moore"), aes(y = dlu, x = dyld)) +
-  facet_grid(rows = vars(scen), cols = vars(method)) 
-
-# ggplot(cropdata) + geom_density_ridges(aes(height=..density..,
-#                                            weight=Area),    
-#                                        scale= 0.95,
-#                                        stat="density") 
-
 
 ggplot(filter(repcropdata, zonename != "OTHR"),
        aes(x = dyld, y = dlu)) + 
@@ -217,17 +184,49 @@ ggplot(filter(repcropdata, zonename != "OTHR"),
        title = crop
   )
 
-ggplot(filter(repcropdata, zonename != "OTHR"),
+ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR"),
        aes(x = dyld, y = dlu)) + 
   facet_grid(scen + zonename ~ method) +
-  geom_density_ridges(aes(fill = zonename, alpha = 0.8), show.legend = F) +
+  geom_density_ridges(aes(fill = zonename, alpha = 0.8), 
+                      show.legend = F) +
   theme_ridges() + 
   labs(x = "Yield change (%)",
        y = "Land use change (pp of whole cell)",
-       title = crop
+       title = crop,
+       subtitle = "Brazil"
   )
 
 
+
+for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
+repcropdata <- repdata %>% filter(Crop == crop)
+plt <- ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR"),
+       aes(x = dyld, y = dlu)) + 
+  facet_grid(scen + zonename ~ method) +
+  geom_density_ridges(aes(fill = zonename, alpha = 0.8), 
+                      show.legend = F) +
+  theme_ridges() + 
+  labs(x = "Yield change (%)",
+       y = "Land use change (pp of whole cell)",
+       title = crop,
+       subtitle = "Brazil"
+  )
+print(plt)
+}
+
+#Testing
+ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR" & !(scen == "deltaT0" & dlu == "0.00")),
+       aes(x = dyld, y = dlu)) + 
+  facet_grid(scen + zonename~ method) +
+  geom_density_ridges(aes(fill = zonename, alpha = 0.8),
+                      show.legend = F) +
+  theme_ridges() + 
+  labs(x = "Yield change (%)",
+       y = "Land use change (pp of whole cell)",
+       title = crop,
+       subtitle = "Brazil"
+  ) + 
+  geom_vline(xintercept = -5)
 
 # 
 # theme_Publication <- function(base_size=10, base_family="Helvetica") {
