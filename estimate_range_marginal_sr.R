@@ -63,6 +63,14 @@ if (irescale) {
 ndays = c(120,120,120)
 names(ndays) <- crops
 }
+
+# Scale sensitivities based on VPD~EDD:Tmean relationships
+ivpdscale = TRUE
+if (ivpdscale) {
+vpdscalefolder = paste0("vpd_scaling/",tdbase,"/")
+vpdreftemp = 23 # Upper bound temp category of the reference region, should be the US here
+}
+ 
 # Cap for logY impacts, both positive and negative
 icap = FALSE
 cap = 0.5
@@ -83,8 +91,8 @@ if (izoneagt) {
 }
 
 # FIXME: Fixed backgound warming.Substitute for a RCP file
-bgtemp = 0.0
-bgtmax = 0.0
+bgtemp = 2.0
+bgtmax = 2.0
 basetit = paste0("BG + ",round(bgtemp),"\u00B0C")
 
 
@@ -239,6 +247,8 @@ if (iplotcdf) {
   
 }
 
+
+
 # Join all tables in a single file to be saved
 outdata = data.frame()
 
@@ -257,13 +267,27 @@ for (crop in crops) {
   # ydata <- cropdata %>% filter(ScenYear == year)
   ydata = cropdata
   
+  # VPD scaling
+  if (ivpdscale) {
+    vpddata = read.csv(paste0(vpdscalefolder,crop,".vpdscale.csv"))
+    cuts = vpddata$cuts
+    vpddata$vpdscale = vpddata$coefs/vpddata$coefs[vpddata$cuts == vpdreftemp]
+    ydata$tempcat = cut(ydata$tempbase,cuts)
+    inds = findInterval(ydata$tempbase,cuts, left.open = T)
+    inds[inds == 0] <- NA
+    ydata$tempupper = vpddata$cuts[-1][inds]
+    ydata$vpdscale = vpddata$vpdscale[-1][inds]
+  }
+  
   # Here we actually apply the equations, setting variable names prepended with the different LU levels
   ludtempvnames = paste0("ludtemp",sprintf("%.2f",dlus))
   ludtmaxvnames = paste0("ludtmax",sprintf("%.2f",dlus))
   ludgddvnames = paste0("dgddDLU",sprintf("%.2f",dlus))
   ludeddvnames = paste0("deddDLU",sprintf("%.2f",dlus))
   ludlogyvnames = paste0("dlogyDLU",sprintf("%.2f",dlus))
+  lunoscaledlogyvnames = paste0("noscaledlogyDLU",sprintf("%.2f",dlus))
   ludyppvnames = paste0("dyppDLU",sprintf("%.2f",dlus))
+  lunoscaledyppvnames = paste0("noscaledyppDLU",sprintf("%.2f",dlus))
   for (i in 1:length(dlus)) {
     # Changes in temp, tmax
     if (izoneagt) {
@@ -288,8 +312,18 @@ for (crop in crops) {
     }                                  
     
     # Apply the GDD and EDD sensitivities
-    ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
-      eddsens[crop]*ydata[ludeddvnames[i]]
+
+    
+    # Apply VPD scaling only on EDD, not on GDD
+    if (ivpdscale) {
+      ydata[lunoscaledlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+        eddsens[crop]*ydata[ludeddvnames[i]]
+      ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+        eddsens[crop]*ydata[ludeddvnames[i]]*ydata$vpdscale
+    } else {
+      ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+        eddsens[crop]*ydata[ludeddvnames[i]]
+    }
     
     #FIXME: Cap impacts at cap
     if (icap) {
@@ -299,6 +333,9 @@ for (crop in crops) {
     
     # Get a percent value
     ydata[ludyppvnames[i]] = ydata[ludlogyvnames[i]]*100.0
+    if (ivpdscale) {
+      ydata[lunoscaledyppvnames[i]] = ydata[lunoscaledlogyvnames[i]]*100.0
+    }
   }
   
   # Join with the shapefile
@@ -315,7 +352,7 @@ for (crop in crops) {
                      # by = NULL)
   
   # Valid names to rasterize 
-  valid = c("tempbase","tmaxbase",ludtempvnames,ludtmaxvnames,ludgddvnames ,ludeddvnames, ludlogyvnames,ludyppvnames) 
+  valid = c("tempbase","tmaxbase",ludtempvnames,ludtmaxvnames,ludgddvnames ,ludeddvnames, ludlogyvnames, ludyppvnames, lunoscaledlogyvnames,lunoscaledyppvnames) 
   
   yrast <- rasterize(yshp, ref, field = valid, fun = mean, background = NA_real_,
                      by = NULL)
@@ -361,6 +398,28 @@ for (crop in crops) {
               panel.label.size = 1.2,
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
+  
+  # Repeat without VPD scaling if that's enabled
+  if (ivpdscale) {
+    subrast = subset(yrast,lunoscaledyppvnames)
+    
+    if (irescale) {
+      tit = paste0("Unscaled dYld", " | ",crop, " | ",scen," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+    } else {
+      tit = paste0("Unscaled dYld | ", crop, " | ",scen," | Min: ", sprintf("%.2f",min(as.array(subrast), na.rm=T)))
+    }
+    
+    plotnoscale <- tm_shape(subrast, bbox = bbox) + 
+      tm_raster(palette = pal, breaks = breaks,
+                title = expression(paste(Delta,"Yield (%)"))) + 
+      tm_shape(reg) + tm_borders() +
+      tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+                legend.outside = T) + 
+      tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+                panel.label.size = 1.2,
+                main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+      tm_facets(nrow = gnrow, ncol = gncol)
+  }
   
   # Repeating for the marginal effects
   subrast = subset(yrast,ludyppvnames)
@@ -464,6 +523,21 @@ for (crop in crops) {
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
   
+  # Anomalies Scaled -  Unscaled
+  subrast = subset(yrast,ludyppvnames) - subset(yrast,lunoscaledyppvnames)
+  tit = paste0("Scaled - Unscaled")
+  breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
+  plotanom <- tm_shape(subrast, bbox = bbox) + 
+    tm_raster(palette = "RdBu", midpoint = 0, breaks = breaks,
+              title = expression(paste("Change in ",Delta,"Yield"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
+  
   # CDFs
   if (iplotcdf) {
     png(filename = paste0(outfpref,crop,"_CDF_.png"), width = 600, height = 600, unit = "px", pointsize = 16)
@@ -509,11 +583,14 @@ for (crop in crops) {
   png(filename = paste0(outfpref,crop,"_MARGINAL.png"), width = 1000, height = 500, unit = "px", pointsize = 16)
   print(plotobjmarg)
   dev.off()
-  png(filename = paste0(outfpref,crop,"_GDD.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
-  print(tmap_arrange(plotobj,plotdgdd,plotdedd, ncol = 3))
+  # png(filename = paste0(outfpref,crop,"_GDD.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
+  # print(tmap_arrange(plotobj,plotdgdd,plotdedd, ncol = 3))
+  # dev.off()
+  png(filename = paste0(outfpref,crop,"_VPD.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
+  print(tmap_arrange(plotobj,plotnoscale,plotanom, ncol = 3))
   dev.off()
-  png(filename = paste0(outfpref,crop,"_ALL.png"), width = 2500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
-  print(tmap_arrange(plotobj,plotdgdd,plotdtmp,plotdedd,plotdtmx, ncol = 5))
+  png(filename = paste0(outfpref,crop,"_ALL.png"), width = 3000, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
+  print(tmap_arrange(plotobj,plotnoscale,plotdgdd,plotdtmp,plotdedd,plotdtmx, ncol = 6))
   dev.off()
   
 }
