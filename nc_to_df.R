@@ -6,8 +6,8 @@ library(sf)
 
 calname = "Sacks_ZARC_fill_fill_120d"
 
-infolder  = paste0("sheffield_computed/",calname,"/")
-outfolder  = paste0("sheffield_dfs/",calname,"/")
+infolder  = paste0("sheffield_vpd/",calname,"/")
+outfolder  = paste0("sheffield_dfs_vpd/",calname,"/")
 # infolder  = "xavier_computed/"
 # outfolder  = "xavier_dfs/"
 
@@ -17,13 +17,14 @@ mskthresh = 0.01
 
 zonfname = "GIS/COLROW30_K_G.shp"
 
-dir.create(outfolder, showWarnings = FALSE)
+dir.create(outfolder, showWarnings = FALSE, recursive = TRUE)
 
 # crops = c("Soybeans")
 # years = 1991:1993
 
 crops = c("Maize","Soybeans","Cotton")
-years = 1991:2008
+# years = 1991:2008
+years = 2002:2008
 
 msk = raster(mskfname)
 msk[msk<mskthresh] <- NA
@@ -60,6 +61,7 @@ for (crop in crops) {
     tmaxmean = raster(infname, varname = "tmaxmean")
     tminmean = raster(infname, varname = "tminmean")
     precmean = raster(infname, varname = "precmean")
+    vpdmean = raster(infname, varname = "vpdmean")
     
     trngmean = raster(infname, varname = "trngmean")
     ndays =  raster(infname, varname = "ndays")
@@ -79,6 +81,7 @@ for (crop in crops) {
     tmaxmean = as.data.frame(tmaxmean, xy = TRUE) 
     tminmean = as.data.frame(tminmean, xy = TRUE) 
     precmean = as.data.frame(precmean, xy = TRUE)
+    vpdmean = as.data.frame(vpdmean, xy = TRUE)
     
     trngmean = as.data.frame(trngmean, xy = TRUE) 
     ndays = as.data.frame(ndays, xy = TRUE) 
@@ -90,6 +93,7 @@ for (crop in crops) {
       left_join(tmaxmean, by = c("x","y")) %>% 
       left_join(tminmean, by = c("x","y")) %>% 
       left_join(precmean, by = c("x","y")) %>%
+      left_join(vpdmean, by = c("x","y")) %>%
       left_join(trngmean, by = c("x","y")) %>% 
       left_join(ndays, by = c("x","y")) %>% 
       left_join(tempdist, by = c("x","y")) %>% 
