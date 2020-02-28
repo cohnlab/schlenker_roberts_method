@@ -9,7 +9,9 @@ xavier_dfs/
 sheffield/
 sheffield_calendars/
 sheffield_computed/
+sheffield_vpd/
 sheffield_dfs/
+sheffield_dfs_vpd/
 calendars_sacks
 calendars_sacks/
 calendars_sacks_interp/
