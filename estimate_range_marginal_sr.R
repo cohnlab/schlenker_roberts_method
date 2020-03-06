@@ -274,7 +274,7 @@ for (crop in crops) {
     vpddata$vpdscale = vpddata$coefs/vpddata$coefs[vpddata$cuts == vpdreftemp]
     ydata$tempcat = cut(ydata$tempbase,cuts)
     inds = findInterval(ydata$tempbase,cuts, left.open = T)
-    inds[inds == 0] <- NA
+    inds[inds == 0] <- 1
     ydata$tempupper = vpddata$cuts[-1][inds]
     ydata$vpdscale = vpddata$vpdscale[-1][inds]
   }
