@@ -12,7 +12,7 @@ infolder  = paste0("sheffield_dfs_vpd/",calname,"/")
 outfolder = paste0("vpd_scaling/",calname,"/")
 
 # years = 1991:1993
-years = 2001:2003
+years = 2001:2008
 
 # crops = c("Soybeans")
 crops = c("Maize","Soybeans","Cotton")
@@ -116,4 +116,27 @@ for (crop in crops) {
 # ggplot(data) + geom_point(aes(x = EDD, y = vpdmean, col = tempmean)) + 
 #   geom_line(aes(x = EDD, y = pred)) +
 #   scale_color_gradientn(colours = heat.colors(5, rev = T))
+
+
+fit = lm(vpdmean ~ EDD + EDD:log(tempmean),data=data)
+summary(fit)
+data$pred = predict(fit,data)
+
+t = seq(15,35)
+plot(t, fit$coefficients['EDD'] + fit$coefficients['EDD:log(tempmean)']*log(t))
+
+plt = ggplot(data) + geom_point(aes(x = EDD, y = vpdmean, col = tempmean), size = 0.5) + 
+  geom_line(aes(x = EDD, y = pred)) +
+  scale_color_gradientn(colours = heat.colors(5, rev = T)) + 
+  facet_wrap(~tempcat) +
+  ggtitle(crop)
+
+
+plt = ggplot(data) + geom_point(aes(x = EDD, y = vpdmean, col = tempmean), size = 0.5) + 
+  geom_line(aes(x = EDD, y = pred)) +
+  scale_color_gradientn(colours = heat.colors(5, rev = T)) + 
+  facet_wrap(~tempcat) +
+  ggtitle(crop)
+print(plt)
+
 
