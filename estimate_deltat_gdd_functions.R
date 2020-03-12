@@ -8,7 +8,7 @@ library(lspline)
 
 calname = "Sacks_ZARC_fill_fill_120d"
 
-infolder  = paste0("sheffield_dfs/",calname,"/")
+infolder  = paste0("sheffield_dfs_vpd/",calname,"/")
 outfolder = paste0("gdd_betas/",calname,"/")
 
 # years = 1991:1993
@@ -69,6 +69,9 @@ add_lines_betas <- function(betas) {
   }
 }
 
+# Create output folder
+dir.create(file.path(outfolder), showWarnings = FALSE, recursive = T)
+
 png(filename = paste0(outfolder,"plots.png"), width = 600, height = 300*(length(crops)), unit = "px", pointsize = 16)
 par(mfrow = c(length(crops),2))
 # crop = crops[1]
@@ -98,8 +101,7 @@ for (crop in crops) {
   with(data,plot(tempmean,GDD,main=crop,pch='.', cex = 2.0))
   add_lines_betas(betasgdd)
   
-  # Create output folder
-  dir.create(file.path(outfolder), showWarnings = FALSE)
+
   
   # Write each crop and nEDD/nGDD piecewise coefficients and hinges
   write.csv(betasedd, paste0(outfolder, crop, ".betas.nEDD.csv"), row.names = F)
