@@ -2,7 +2,7 @@
 Packages <- c("Rcpp","dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer","classInt")
 lapply(Packages, library, character.only = TRUE)
 
-tdbase = "Sacks_Zarc_fill_fill_120d"
+tdbase = "Sacks_ZARC_fill_fill_120d"
 
 versionstring = "butler1"
 
