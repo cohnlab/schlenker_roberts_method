@@ -4,6 +4,8 @@ lapply(Packages, library, character.only = TRUE)
 
 tdbase = "Sacks_Zarc_fill_fill_120d"
 
+versionstring = "butler1"
+
 tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
 tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
 
@@ -43,10 +45,10 @@ if (iplotcdf) {
 
 # Path for output plots
 if (iglobal) {
-  outfolder = paste0("plots_sr_memo_global/",tdbase,"/")
-  wrtfolder = paste0("rasters_sr_memo_global/",tdbase,"/")
+  outfolder = paste0("plots_sr_memo_global/",tdbase,"/",versionstring,"/")
+  wrtfolder = paste0("rasters_sr_memo_global/",tdbase,"/",versionstring,"/")
 } else {
-  outfolder = paste0("plots_sr_memo/",tdbase,"/")
+  outfolder = paste0("plots_sr_memo/",tdbase,"/",versionstring,"/")
 }
 
 # crops = c("Soybeans")
@@ -65,10 +67,19 @@ names(ndays) <- crops
 }
 
 # Scale sensitivities based on VPD~EDD:Tmean relationships
-ivpdscale = TRUE
+ivpdscale = FALSE
 if (ivpdscale) {
 vpdscalefolder = paste0("vpd_scaling/",tdbase,"/")
-vpdreftemp = 23 # Upper bound temp category of the reference region, should be the US here
+vpdreftemp = 22 # Upper bound temp category of the reference region, should be the US here
+vpdspec = "spec2"
+}
+
+# Use sensitivity curve for Maize as in Butler and Huybers (digitizing/traced.ods)
+# Other crops are scaled using eddsens below
+ibhsens = TRUE
+if (ibhsens) {
+bhsenscoef0 = -0.009038992944479
+bhsenscoef1 = 0.001231793519879
 }
  
 # Cap for logY impacts, both positive and negative
@@ -142,8 +153,8 @@ overbreaks = seq(-50,50,5)
 # overbreaks = seq(-100,100,10)
 
 # Create output folder
-dir.create(outfolder, showWarnings = F)
-dir.create(wrtfolder, showWarnings = F)
+dir.create(outfolder, showWarnings = F, recursive = T)
+dir.create(wrtfolder, showWarnings = F, recursive = T)
 
 # Read baseline temp data
 tempbase <- read.csv(tempbasefname) #%>% dplyr::select(-X)
@@ -269,14 +280,37 @@ for (crop in crops) {
   
   # VPD scaling
   if (ivpdscale) {
-    vpddata = read.csv(paste0(vpdscalefolder,crop,".vpdscale.csv"))
-    cuts = vpddata$cuts
-    vpddata$vpdscale = vpddata$coefs/vpddata$coefs[vpddata$cuts == vpdreftemp]
-    ydata$tempcat = cut(ydata$tempbase,cuts)
-    inds = findInterval(ydata$tempbase,cuts, left.open = T)
-    inds[inds == 0] <- 1
-    ydata$tempupper = vpddata$cuts[-1][inds]
-    ydata$vpdscale = vpddata$vpdscale[-1][inds]
+    if (vpdspec %in% c("spec1","spec2") ) {
+      # vpddata = read.csv(paste0(vpdscalefolder,crop,".vpdscale.csv"))
+      vpddata = read.csv(paste0(vpdscalefolder,crop,".vpdscale.",vpdspec,".csv"))
+      # cuts = vpddata$cuts
+      vpddata$vpdscale = vpddata$coefs/vpddata$coefs[findInterval(vpdreftemp,c(-999,vpddata$end), left.open = T)]
+      
+      ydata$tempcat = cut(ydata$tempbase,vpddata$end)
+      inds = findInterval(ydata$tempbase,c(-999,vpddata$end), left.open = T)
+      # inds[inds == 0] <- 1
+      # ydata$tempupper = vpddata$cuts[-1][inds]
+      ydata$tempupper = vpddata$end[inds]
+      ydata$vpdscale = vpddata$vpdscale[inds]
+    } else if (vpdspec == "spec4") {
+      vpddata = read.csv(paste0(vpdscalefolder,crop,".vpdscale.spec4.csv"))
+      refval = vpddata$EDD + log(vpdreftemp)*vpddata$EDD.log.tempmean.
+      ydata$vpdscale = (vpddata$EDD + log(ydata$tempbase)*vpddata$EDD.log.tempmean.)/refval
+      ydata$vpdscale[ydata$vpdscale >= 2] = 2 #FIXME: Got to document this
+    }
+  }
+  
+  # Calculate Butler and Huybers EDD sensitivities
+  if (ibhsens) {
+    # FIXME: First we calculate baseline average EDD using the curves. 
+    # Currently we have to because the CRU dataset doesn't provide daily data for EDD anyway
+    ydata$eddbaseline = eval_nxdd(betasedd,ydata["tmaxbase"])
+    # Cap at 1 to avoid log(0)
+    ydata$eddbaseline[ydata$eddbaseline <= 1] <- 1.0
+    # Apply the Butler and Huybers Maize equation
+    ydata$eddsens = bhsenscoef0 + bhsenscoef1*log(ydata$eddbaseline)
+    # Scale it by the SR values for other crops
+    ydata$eddsens = ydata$eddsens * (eddsens[crop]/eddsens["Maize"])
   }
   
   # Here we actually apply the equations, setting variable names prepended with the different LU levels
@@ -320,6 +354,13 @@ for (crop in crops) {
         eddsens[crop]*ydata[ludeddvnames[i]]
       ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
         eddsens[crop]*ydata[ludeddvnames[i]]*ydata$vpdscale
+    # Calculated Butler and Huybers EDD sensitivities, also do not change GDD sensitivities
+    } else if (ibhsens){
+      ydata[lunoscaledlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+        eddsens[crop]*ydata[ludeddvnames[i]]
+      ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+        ydata$eddsens*ydata[ludeddvnames[i]]
+    # Regular SR equation
     } else {
       ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
         eddsens[crop]*ydata[ludeddvnames[i]]
@@ -333,7 +374,7 @@ for (crop in crops) {
     
     # Get a percent value
     ydata[ludyppvnames[i]] = ydata[ludlogyvnames[i]]*100.0
-    if (ivpdscale) {
+    if (ivpdscale | ibhsens) {
       ydata[lunoscaledyppvnames[i]] = ydata[lunoscaledlogyvnames[i]]*100.0
     }
   }
@@ -353,6 +394,9 @@ for (crop in crops) {
   
   # Valid names to rasterize 
   valid = c("tempbase","tmaxbase",ludtempvnames,ludtmaxvnames,ludgddvnames ,ludeddvnames, ludlogyvnames, ludyppvnames, lunoscaledlogyvnames,lunoscaledyppvnames) 
+  if (ibhsens) {
+    valid = c("eddbaseline","eddsens",valid)
+  }
   
   yrast <- rasterize(yshp, ref, field = valid, fun = mean, background = NA_real_,
                      by = NULL)
@@ -400,7 +444,7 @@ for (crop in crops) {
     tm_facets(nrow = gnrow, ncol = gncol)
   
   # Repeat without VPD scaling if that's enabled
-  if (ivpdscale) {
+  if (ivpdscale | ibhsens) {
     subrast = subset(yrast,lunoscaledyppvnames)
     
     if (irescale) {
@@ -523,6 +567,7 @@ for (crop in crops) {
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
   
+  if (ivpdscale | ibhsens) {
   # Anomalies Scaled -  Unscaled
   subrast = subset(yrast,ludyppvnames) - subset(yrast,lunoscaledyppvnames)
   tit = paste0("Scaled - Unscaled")
@@ -537,6 +582,42 @@ for (crop in crops) {
               panel.label.size = 1.2,
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
+  }
+  
+  if (ibhsens) {
+  # Baseline EDD
+  subrast = subset(yrast,"eddbaseline")
+  tit = paste0("Baseline EDD | ",titsuf)
+  breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
+  ploteddbaseline <- tm_shape(subrast, bbox = bbox) + 
+    tm_raster(palette = "YlOrRd", breaks = breaks,
+              title = expression(paste(Delta,"EDD"))) + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
+  
+  # EDD sensitivities
+  subrast = subset(yrast,"eddsens")
+  tit = paste0("EDD sensitivities")
+  breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
+  # breaks = seq(-0.009,0.001,0.001)
+  ploteddsens <- tm_shape(subrast, bbox = bbox) + 
+    tm_raster(palette = "RdBu", breaks = breaks,
+              title = "Sensitivity") + 
+    tm_shape(reg) + tm_borders() +
+    tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+              legend.outside = T) + 
+    tm_layout(panel.show = T, panel.labels = paste0("dlu",dlus),
+              panel.label.size = 1.2,
+              main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    tm_facets(nrow = gnrow, ncol = gncol)
+  
+  plotsbh = tmap_arrange(ploteddbaseline,ploteddsens,nrow=2)
+  }
   
   # CDFs
   if (iplotcdf) {
@@ -586,9 +667,16 @@ for (crop in crops) {
   # png(filename = paste0(outfpref,crop,"_GDD.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
   # print(tmap_arrange(plotobj,plotdgdd,plotdedd, ncol = 3))
   # dev.off()
-  png(filename = paste0(outfpref,crop,"_VPD.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
+  if (ivpdscale | ibhsens) {
+  png(filename = paste0(outfpref,crop,"_SCALING.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
   print(tmap_arrange(plotobj,plotnoscale,plotanom, ncol = 3))
   dev.off()
+  }
+  if (ibhsens) {
+  png(filename = paste0(outfpref,crop,"_BH.png"), width = 2500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
+  print(tmap_arrange(plotobj,plotnoscale,plotanom,ploteddbaseline,ploteddsens, ncol = 5))
+  dev.off()
+  }
   png(filename = paste0(outfpref,crop,"_ALL.png"), width = 3000, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
   print(tmap_arrange(plotobj,plotnoscale,plotdgdd,plotdtmp,plotdedd,plotdtmx, ncol = 6))
   dev.off()

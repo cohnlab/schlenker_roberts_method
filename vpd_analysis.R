@@ -79,6 +79,28 @@ for (crop in crops) {
   
   write.csv(outdata, outfname, row.names = F)
   
+  # Writing a file for each spec
+  outspec1 = data.frame(start = c(-999,cutstemp), end = c(cutstemp,999), coefs = c(coefs[1],coefs,coefs[length(coefs)]))
+  write.csv(outspec1, paste0(outfolder, crop, ".vpdscale.spec1.csv"), row.names = F)
+  
+  # Spec 2
+  cutstemp = seq(17,35,2)
+  data$tempcat = cut(data$tempmean,cutstemp)
+  fit = lm(vpdmean ~ EDD:tempcat,data=data)
+  coefs = fit$coefficients[grepl("EDD:",names(fit$coefficients))]
+  outspec2 = data.frame(start = c(-999,cutstemp), end = c(cutstemp,999), coefs = c(coefs[1],coefs,coefs[length(coefs)]))
+  write.csv(outspec2, paste0(outfolder, crop, ".vpdscale.spec2.csv"), row.names = F)
+  
+  # Spec 3: Linear interaction
+  fit = lm(vpdmean ~ EDD + EDD:tempmean,data=data)
+  outspec3 = data.frame(t(fit$coefficients))
+  write.csv(outspec3, paste0(outfolder, crop, ".vpdscale.spec3.csv"), row.names = F)
+  
+  # Spec 3: Linear interaction
+  fit = lm(vpdmean ~ EDD + EDD:log(tempmean),data=data)
+  outspec4 = data.frame(t(fit$coefficients))
+  write.csv(outspec4, paste0(outfolder, crop, ".vpdscale.spec4.csv"), row.names = F)
+  
 }
 
 # #TMAX
@@ -117,26 +139,92 @@ for (crop in crops) {
 #   geom_line(aes(x = EDD, y = pred)) +
 #   scale_color_gradientn(colours = heat.colors(5, rev = T))
 
+# Using Rcpp here to avoid figuring out a faster lookup in R
+cppFunction('NumericVector cpp_eval_lut(NumericMatrix x, NumericVector tvec) {
+  int nrow = x.nrow(), ncol = x.ncol();
+  int vsize = tvec.size();
+  int p = 0;
+  double t;
+  double val;
+  NumericVector vout(vsize);
+  for (int p = 0; p < vsize; ++p) {
+  t = tvec(p);
+  for (int i = 0; i < nrow; ++i) {
+  if (t >= x(i,0) && t<= x(i,1)) {
+    vout(p) = x(i,2);
+    break;
+  }
+  }
+  }
+  return vout;
+}')
 
-fit = lm(vpdmean ~ EDD + EDD:log(tempmean),data=data)
+# Wrapper for cpp_eval_lut. Forces a single-column data.frame into a vector
+eval_lut <- function(betas,tvec) {
+  if (is.data.frame(tvec)) {
+    tvec = tvec[,]
+  }
+  return(cpp_eval_lut(as.matrix(betas),as.vector(tvec)))
+}
+
+
+mdata = data.frame(temps = seq(15,35,0.1))
+
+# Spec 1: discrete from 15-35
+# Create categories
+cutstemp = seq(15,35,2)
+data$tempcat = cut(data$tempmean,cutstemp)
+
+fit = lm(vpdmean ~ EDD:tempcat,data=data)
 summary(fit)
-data$pred = predict(fit,data)
 
-t = seq(15,35)
-plot(t, fit$coefficients['EDD'] + fit$coefficients['EDD:log(tempmean)']*log(t))
+coefs = fit$coefficients[grepl("EDD:",names(fit$coefficients))]
 
-plt = ggplot(data) + geom_point(aes(x = EDD, y = vpdmean, col = tempmean), size = 0.5) + 
-  geom_line(aes(x = EDD, y = pred)) +
-  scale_color_gradientn(colours = heat.colors(5, rev = T)) + 
-  facet_wrap(~tempcat) +
-  ggtitle(crop)
+mtable = data.frame(cutstart = c(-999,cutstemp), cutsend = c(cutstemp,999), coefs = c(coefs[1],coefs,coefs[length(coefs)]))
+
+mdata$spec1 = eval_nxdd(mtable,mdata$temps)
+
+# Spec 2: discrete from 17-35
+# Create categories
+cutstemp = seq(17,35,2)
+data$tempcat = cut(data$tempmean,cutstemp)
+
+fit = lm(vpdmean ~ EDD:tempcat,data=data)
+summary(fit)
+
+coefs = fit$coefficients[grepl("EDD:",names(fit$coefficients))]
+
+mtable = data.frame(cutstart = c(-999,cutstemp), cutsend = c(cutstemp,999), coefs = c(coefs[1],coefs,coefs[length(coefs)]))
+
+mdata$spec2 = eval_nxdd(mtable,mdata$temps)
 
 
-plt = ggplot(data) + geom_point(aes(x = EDD, y = vpdmean, col = tempmean), size = 0.5) + 
-  geom_line(aes(x = EDD, y = pred)) +
-  scale_color_gradientn(colours = heat.colors(5, rev = T)) + 
-  facet_wrap(~tempcat) +
-  ggtitle(crop)
-print(plt)
+# Spec 3: Linear interaction
+fit = lm(vpdmean ~ EDD + EDD:tempmean,data=data)
+summary(fit)
+mdata$spec3 = fit$coefficients['EDD'] + fit$coefficients['EDD:tempmean']*mdata$temps
 
+# Spec 4: Log interaction
+fit = lm(vpdmean ~ EDD + EDD:log(tempmean),data=data)
+mdata$spec4 = fit$coefficients['EDD'] + fit$coefficients['EDD:log(tempmean)']*log(mdata$temps)
+
+# Apply scaling
+sdata = mdata
+refind = which.min(abs(mdata$temps - 22.00))
+sdata[,-1] = sweep(mdata[,-1],2,t(mdata[refind,-1]),"/")
+
+# Plot everyone
+longmdata <- mdata %>% gather(key = "variable", value = "value", -temps)
+longsdata <- sdata %>% gather(key = "variable", value = "value", -temps)
+
+# ggplot(longmdata,aes(x = temps, y = value)) +
+  # geom_line(aes(color = variable),size = 1.5) + theme_classic()
+ggplot(longsdata,aes(x = temps, y = value)) +
+  geom_line(aes(color = variable),size = 1.5) +
+  labs(y = "Scaling factor",
+       x = "Baseline temperature",
+       color = "VPD~EDD model",
+       title = crop) +
+  scale_color_discrete(labels = c("Binned (15-35)","Binned (17-35)","Linear interaction","Log interaction")) +
+  theme_classic(base_size = 14)
 

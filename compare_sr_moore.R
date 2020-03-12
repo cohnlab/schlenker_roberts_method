@@ -168,7 +168,7 @@ repdata$reps = ceiling(repdata$Area/0.002)
 repdata <- repdata[rep(row.names(repdata), repdata$reps), ]
 # plot(ecdf(repdata$Area), xlim = c(0.0,0.01))
 
-crop = "Wheat"
+crop = "Soybeans"
 # FIXME doesn't work passing crop to filter
 cropdata <- alldata %>% filter(Crop == crop)
 repcropdata <- repdata %>% filter(Crop == crop)
