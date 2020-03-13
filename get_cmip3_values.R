@@ -105,7 +105,7 @@ crumsk[!is.na(crumsk)] <- 1.0
 crutmpnc = brick(crutmpfname, varname = "tmp")
 crutmpnc = mask(crutmpnc,crumsk)
 crutmxnc = brick(crutmxfname, varname = "tmx")
-crutmxnc = mask(crutmxnc,msk)
+crutmxnc = mask(crutmxnc,crumsk)
 
 crutmp.vx = velox(crutmpnc)
 extcrutmp = crutmp.vx$extract(sp = shp, fun = function(x) mean(x,na.rm=T), df = TRUE,small = TRUE)
@@ -125,17 +125,52 @@ datacrutmx = gather(extcrutmx,key = "date", value = "tas", -country)
 datacrutmx$date = as.Date(datacrutmx$date, format = "X%Y.%m.%d")
 datacrutmx$month = as.numeric(format(datacrutmx$date,"%m"))
 
+usemon = c(5,6,7,8)
+
 datacrutmp %>% 
   filter(country == "United States") %>%
   filter(month %in% usemon) %>%
   group_by(country) %>% summarize(value = mean(tas,na.rm = T)) %>% 
-  select(value) %>% as.numeric
+  dplyr::select(value) %>% as.numeric
 
 datacrutmx %>% 
   filter(country == "United States") %>%
   filter(month %in% usemon) %>%
   group_by(country) %>% summarize(value = mean(tas,na.rm = T)) %>% 
-  select(value) %>% as.numeric
+  dplyr::select(value) %>% as.numeric
+
+
+usemon = c(11,12,1,2,3,4,5)
+safcountries = c("South Africa","Mozambique","Tanzania, United Republic of","Zimbabwe")
+
+datacrutmp %>% 
+  filter(country %in% safcountries) %>%
+  filter(month %in% usemon) %>%
+  group_by(country) %>% summarize(value = mean(tas,na.rm = T)) 
+
+datacrutmx %>% 
+  filter(country %in% safcountries) %>%
+  filter(month %in% usemon) %>%
+  group_by(country) %>% summarize(value = mean(tas,na.rm = T)) 
+
+usemon = c(10,11,12,1,2,3,4,5)
+datacrutmp %>% 
+  filter(country == "Brazil") %>%
+  filter(month %in% usemon) %>%
+  group_by(country) %>% summarize(value = mean(tas,na.rm = T)) 
+
+datacrutmx %>% 
+  filter(country  == "Brazil") %>%
+  filter(month %in% usemon) %>%
+  group_by(country) %>% summarize(value = mean(tas,na.rm = T)) 
+
+
+
+# datacrutmx %>% 
+#   filter(country == "United States") %>%
+#   filter(month %in% usemon) %>%
+#   group_by(country) %>% summarize(value = mean(tas,na.rm = T)) %>% 
+#   select(value) %>% as.numeric
 
 
 
