@@ -25,6 +25,11 @@ betasgdd = read.csv(paste0(betasfolder,crop,".betas.nGDD.csv"))
 caldata$deltagdd = eval_nxdd(betasgdd,caldata$tmaxbase + caldata$deltat) - eval_nxdd(betasgdd,caldata$tmaxbase)
 caldata$deltaedd = eval_nxdd(betasedd,caldata$tmaxbase + caldata$deltat) - eval_nxdd(betasedd,caldata$tmaxbase)
 
+caldata$gddsens = gddsens[[crop]]
+
+caldata$deltayfrac = 0.01*caldata$deltay
+
+caldata$eddsens = (caldata$deltayfrac - caldata$gddsens*caldata$deltaedd)/caldata$deltaedd
 
 coef0 = 0.0
 coef1 = 1.0
