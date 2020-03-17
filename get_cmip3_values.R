@@ -11,7 +11,8 @@ outfolder = "test_output_tables/"
 
 #shpfname = 'globiom_grid/worldCR.shp'
 # shpfname = 'globiom_grid/COLROW30.shp'
-shpfname = 'GIS/Countries_WGS84.shp'
+# shpfname = 'GIS/Countries_WGS84.shp'
+shpfname = 'GIS/ne_50m_admin_0_countries_lakes.shp'
 
 # cropnames = c('Maize','Soybeans','Wheat')
 # cropnames = c('Maize','Rice','Soybeans','Wheat','Cotton')

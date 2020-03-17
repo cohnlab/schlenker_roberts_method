@@ -24,14 +24,16 @@ crop = "Maize"
 betasedd = read.csv(paste0(betasfolder,crop,".betas.nEDD.csv"))
 betasgdd = read.csv(paste0(betasfolder,crop,".betas.nGDD.csv"))
 
-caldata$deltagdd = eval_nxdd(betasgdd,caldata$tmx + caldata$X.Temp) - eval_nxdd(betasgdd,caldata$tmx)
+
+
+caldata$deltagdd = eval_nxdd(betasgdd,caldata$tmp + caldata$X.Temp) - eval_nxdd(betasgdd,caldata$tmp)
 caldata$deltaedd = eval_nxdd(betasedd,caldata$tmx + caldata$X.Temp) - eval_nxdd(betasedd,caldata$tmx)
 
 caldata$gddsens = gddsens[[crop]]
 
 caldata$deltayfrac = 0.01*caldata$deltay
 
-caldata$eddsens = (caldata$deltayfrac - caldata$gddsens*caldata$deltaedd)/caldata$deltaedd
+caldata$eddsens = (caldata$deltayfrac - caldata$gddsens*caldata$deltagdd)/caldata$deltaedd
 
 eddstudies = c("Schlenker and Lobell 2010","Schlenker and Roberts 2009")
 
@@ -58,14 +60,20 @@ ggplot(filter(statdata, !(Reference %in% c("Moya et al", "Corobov"))),
        aes(x = tmx, y = eddsens)) +
   geom_point(aes(shape = modeltype, color = bootstrap.group),size = 4) + theme_classic()
 
+ggplot(filter(statdata, tmx >= 30 & (Reference %in% c("Lobell et al. 2008"))),
+       aes(x = tmx, y = eddsens)) +
+  geom_point(aes(shape = modeltype, color = bootstrap.group),size = 4)
+
 hlinevalue = -0.006435774
-ggplot(filter(statdata, (Reference %in% c("Schlenker and Roberts 2009"))),
+ggplot(filter(caldata, (Reference %in% c("Schlenker and Roberts 2009"))),
        aes(x = X.Temp, y = eddsens)) +
   geom_point(aes(color = bootstrap.group),size = 4) + theme_classic() +
-  xlab("deltaT") + ylim(c(-0.02,-0.006)) + 
+  xlab("deltaT") + #ylim(c(-0.02,-0.006)) + 
   geom_hline(yintercept = hlinevalue) + 
   geom_text(aes(2,hlinevalue,
                 label = paste("SR value = ",sprintf("%f", hlinevalue)), vjust = -1))
+
+
 
 # View(filter(statdata, (Reference %in% c("Schlenker and Roberts 2009"))))
 
@@ -74,4 +82,33 @@ ggplot(filter(statdata, (Reference %in% c("Schlenker and Roberts 2009"))),
 coef0 = 0.0
 coef1 = 1.0
 
+bhsenscoef0 = -0.009038992944479
+bhsenscoef1 = 0.001231793519879
+
+bhdata = data.frame(tmx = seq(20,40,0.1))
+bhdata$baseedd = eval_nxdd(betasedd,bhdata$tmx)
+bhdata$bh = bhsenscoef0 + bhsenscoef1*log(bhdata$baseedd)
+
+
+ggplot(statdata,aes(x = tmx, y = eddsens)) +
+  geom_point(aes(shape = modeltype, color = bootstrap.group),size = 4) + 
+  geom_line(data = bhdata,aes(x = tmx,y=bh)) +
+  theme_classic()
+
+ggplot() + geom_line(data = bhdata,aes(x = tmx,y=bh))
+
+
+
+#This is just reproducibility testing
+caldata = read.csv("rasters_sr_memo_global/Sacks_Zarc_fill_fill_120d/butler1/sr_deltaT2_2000.csv")
+caldata = filter(caldata,Crop == crop)
+caldata$tmx = caldata$tmaxbase
+caldata$tmp = caldata$tempbase
+caldata$X.Temp = caldata$ludtemp1.00
+caldata$deltay = caldata$noscaledyppDLU1.00
+
+# caldata$deltagdd = caldata$dgddDLU1.00
+# caldata$deltaedd = caldata$deddDLU1.00
+
+plot(caldata$deltaedd,caldata$deddDLU1.00)
 
