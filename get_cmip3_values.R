@@ -81,7 +81,8 @@ nc.vx = velox(nc)
 #ext = nc.vx$extract(sp = shp, fun = function(x) mean(x, na.rm = TRUE), small = TRUE)
 # ext = nc.vx$extract_points(sp = shp)
 ext = nc.vx$extract(sp = shp, fun = function(x) mean(x,na.rm=T), df = TRUE,small = TRUE)
-ext$ID_sp <- shp$CNTRY_NAME
+# ext$ID_sp <- shp$CNTRY_NAME
+ext$ID_sp <- shp$ADM0_A3
 names(ext)[names(ext) == "ID_sp"] <- "country"
 colnames(ext)[-1] <- names(nc)
 
@@ -199,3 +200,5 @@ datacrutmx %>%
 # 
 # st_write(shp,'globiom_grid/test.shp')
 
+
+data %>% filter(country == "USA", month %in% c(5,6,7,8)) -> usdata

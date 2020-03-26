@@ -4,7 +4,10 @@ lapply(Packages, library, character.only = TRUE)
 
 # Setup for SR
 tdbase = "Sacks_Zarc_fill_fill_120d"
-srinfolder = paste0("rasters_sr_memo_global/",tdbase,"/")
+versionstring = "tmaxsens_linear1"
+
+# srinfolder = paste0("rasters_sr_memo_global/",tdbase,"/")
+srinfolder = paste0("rasters_sr_memo_global/",tdbase,"/",versionstring,"/")
 moinfolder = paste0("../AgroServYield_coefficients/estimated_global/Feb7/")
 
 srscens = c("deltaT0","deltaT1","deltaT2")

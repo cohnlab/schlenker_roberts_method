@@ -4,7 +4,7 @@ infolder = "../globiom_clim_extract/output_tables/"
 outfolder = "scenario_tables/"
 
 invarnames = c("gccdtemp","gccdtmax")
-outvarnames = c("gccdtemp","gccdtemp")
+outvarnames = c("gccdtemp","gccdtmax")
 names(outvarnames) <- invarnames
 
 crops = c("Maize","Soybeans","Cotton")
@@ -26,7 +26,7 @@ for (crop in crops) {
       infname = paste0(infolder,crop,".",scenario,".",invarname,".all.csv")
       indata = read.csv(infname)
       indata %>% 
-        select(-c("XCOORD","YCOORD","RealArea_m")) %>% 
+        dplyr::select(-c("XCOORD","YCOORD","RealArea_m")) %>% 
         rename(ID = "COLROW30", Crop = "crop", scen = "rcp") %>%
         gather(key = "ScenYear",value = "Value",-ID,-Crop,-scen) -> indata
       indata$ScenYear = as.factor(as.numeric(substr(indata$ScenYear,2,5)))

@@ -4,7 +4,7 @@ lapply(Packages, library, character.only = TRUE)
 
 tdbase = "Sacks_ZARC_fill_fill_120d"
 
-versionstring = "butler1"
+versionstring = "tmaxsens_linear1"
 
 tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
 tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
@@ -76,10 +76,30 @@ vpdspec = "spec2"
 
 # Use sensitivity curve for Maize as in Butler and Huybers (digitizing/traced.ods)
 # Other crops are scaled using eddsens below
-ibhsens = TRUE
+ibhsens = FALSE
 if (ibhsens) {
 bhsenscoef0 = -0.009038992944479
 bhsenscoef1 = 0.001231793519879
+}
+
+# Use a custom scaling factor for eddsens that depends on Tmax
+itmaxsens = TRUE
+if (itmaxsens) {
+## Log 
+# coef0 = 13.1601
+# coef1 = -3.716576
+  
+## Logistic
+# k = 1
+# a = 0.39
+# m = 28.8
+# b = 2
+
+# Linear stepwise
+uplim = 1
+lolim = 0.42
+coef0 = 4.0832
+coef1 = -0.1159
 }
  
 # Cap for logY impacts, both positive and negative
@@ -102,8 +122,8 @@ if (izoneagt) {
 }
 
 # FIXME: Fixed backgound warming.Substitute for a RCP file
-bgtemp = 2.0
-bgtmax = 2.0
+bgtemp = 0.0
+bgtmax = 0.0
 basetit = paste0("BG + ",round(bgtemp),"\u00B0C")
 
 
@@ -360,6 +380,23 @@ for (crop in crops) {
         eddsens[crop]*ydata[ludeddvnames[i]]
       ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
         ydata$eddsens*ydata[ludeddvnames[i]]
+    } else if (itmaxsens){
+      # # Log
+      # ydata$tmaxsens = coef0 + coef1*log(ydata$tmaxbase)
+      # ydata$tmaxsens[is.na(ydata$tmaxsens)] <- 0.0 # Zero sensitivity where tmax=0
+      # # Logistic
+      # ydata$tmaxsens = k - (k-a)/(1 + exp(-b*(ydata$tmaxbase-m)))
+      # # Stepwise linear
+      ydata$tmaxsens = coef0 + coef1*ydata$tmaxbase
+      ydata$tmaxsens = pmin(uplim, ydata$tmaxsens)
+      ydata$tmaxsens = pmax(lolim, ydata$tmaxsens)
+      
+      
+      
+      ydata[lunoscaledlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+        eddsens[crop]*ydata[ludeddvnames[i]]
+      ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
+        eddsens[crop]*ydata[ludeddvnames[i]]*ydata$tmaxsens
     # Regular SR equation
     } else {
       ydata[ludlogyvnames[i]] = gddsens[crop]*ydata[ludgddvnames[i]] +
@@ -374,7 +411,7 @@ for (crop in crops) {
     
     # Get a percent value
     ydata[ludyppvnames[i]] = ydata[ludlogyvnames[i]]*100.0
-    if (ivpdscale | ibhsens) {
+    if (ivpdscale | ibhsens | itmaxsens) {
       ydata[lunoscaledyppvnames[i]] = ydata[lunoscaledlogyvnames[i]]*100.0
     }
   }
@@ -396,6 +433,9 @@ for (crop in crops) {
   valid = c("tempbase","tmaxbase",ludtempvnames,ludtmaxvnames,ludgddvnames ,ludeddvnames, ludlogyvnames, ludyppvnames, lunoscaledlogyvnames,lunoscaledyppvnames) 
   if (ibhsens) {
     valid = c("eddbaseline","eddsens",valid)
+  }
+  if (itmaxsens) {
+    valid = c("tmaxsens",valid)
   }
   
   yrast <- rasterize(yshp, ref, field = valid, fun = mean, background = NA_real_,
@@ -444,7 +484,7 @@ for (crop in crops) {
     tm_facets(nrow = gnrow, ncol = gncol)
   
   # Repeat without VPD scaling if that's enabled
-  if (ivpdscale | ibhsens) {
+  if (ivpdscale | ibhsens | itmaxsens) {
     subrast = subset(yrast,lunoscaledyppvnames)
     
     if (irescale) {
@@ -567,7 +607,7 @@ for (crop in crops) {
               main.title.position = "center", main.title = tit, main.title.size = 1.0) +
     tm_facets(nrow = gnrow, ncol = gncol)
   
-  if (ivpdscale | ibhsens) {
+  if (ivpdscale | ibhsens | itmaxsens) {
   # Anomalies Scaled -  Unscaled
   subrast = subset(yrast,ludyppvnames) - subset(yrast,lunoscaledyppvnames)
   tit = paste0("Scaled - Unscaled")
@@ -667,9 +707,12 @@ for (crop in crops) {
   # png(filename = paste0(outfpref,crop,"_GDD.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
   # print(tmap_arrange(plotobj,plotdgdd,plotdedd, ncol = 3))
   # dev.off()
-  if (ivpdscale | ibhsens) {
+  if (ivpdscale | ibhsens | itmaxsens) {
   png(filename = paste0(outfpref,crop,"_SCALING.png"), width = 1500, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
   print(tmap_arrange(plotobj,plotnoscale,plotanom, ncol = 3))
+  dev.off()
+  png(filename = paste0(outfpref,crop,"_ALL.png"), width = 3000, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
+  print(tmap_arrange(plotobj,plotnoscale,plotdgdd,plotdtmp,plotdedd,plotdtmx, ncol = 6))
   dev.off()
   }
   if (ibhsens) {
@@ -677,9 +720,7 @@ for (crop in crops) {
   print(tmap_arrange(plotobj,plotnoscale,plotanom,ploteddbaseline,ploteddsens, ncol = 5))
   dev.off()
   }
-  png(filename = paste0(outfpref,crop,"_ALL.png"), width = 3000, height = 500*(length(dlus)-2), unit = "px", pointsize = 16)
-  print(tmap_arrange(plotobj,plotnoscale,plotdgdd,plotdtmp,plotdedd,plotdtmx, ncol = 6))
-  dev.off()
+
   
 }
 
