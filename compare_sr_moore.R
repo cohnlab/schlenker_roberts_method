@@ -1,19 +1,24 @@
 # This reads a set of coefficent tables and generates estimates of yield impact for various LU change levels
-Packages <- c("ggridges","dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer","classInt")
+Packages <- c("ggridges","gridExtra","dplyr","tidyverse","data.table","sf","ncdf4","raster","fasterize","tmap","ggspatial","RColorBrewer","classInt")
 lapply(Packages, library, character.only = TRUE)
 
 # Setup for SR
 tdbase = "Sacks_Zarc_fill_fill_120d"
-versionstring = "tmaxsens_linear1"
+versionstring = "agcfsr_bound_usa_scaled_1"
 
 # srinfolder = paste0("rasters_sr_memo_global/",tdbase,"/")
 srinfolder = paste0("rasters_sr_memo_global/",tdbase,"/",versionstring,"/")
-moinfolder = paste0("../AgroServYield_coefficients/estimated_global/Feb7/")
+moinfolder = paste0("../AgroServYield_coefficients/estimated_global/Restrained/")
 
-srscens = c("deltaT0","deltaT1","deltaT2")
+# True if moinfolder files are legacy i.e. in CSV and with different headers
+imolegacy = TRUE
+
+# srscens = c("deltaT0","deltaT1","deltaT2")
+srscens = c("deltaT0","deltaT1","deltaT2","deltaT3","deltaT4","deltaT5")
 srcrops = c("Maize","Soybeans","Cotton")
 
-moscens = c("deltaTssp0","deltaT1degC","deltaT2degC")
+# moscens = c("deltaTssp0","deltaT1degC","deltaT2degC")
+moscens = c("deltaT0","deltaT1","deltaT2","deltaT3","deltaT4","deltaT5")
 mocrops = c("Maize","Rice","Wheat")
 
 names(moscens) <- srscens
@@ -23,6 +28,10 @@ moyear = 2050
 
 dlus = c(0.00,0.25,0.50,1.00)
 dlusufs = sprintf("%.2f",dlus)
+# These are the dlus to be actually used. Will be filtered out before the repetition part
+usedlus = c(0.00)
+usedlusufs = sprintf("%.2f",usedlus)
+
 
 # File with the area weights for all crops
 wgtfname = "GIS/areas.csv"
@@ -69,8 +78,15 @@ srdata$method = "SR"
 modata = data.frame()
 
 for (iscen in moscens) {
-  infname = paste0(moinfolder,iscen,"/estimate_range_",iscen,"_",moyear,"_all.rds")
-  indata = readRDS(infname)
+  if (imolegacy) {
+    infname = paste0(moinfolder,iscen,"/estimate_range_",iscen,"_",moyear,".csv")
+    indata = read.csv(infname)
+    indata$scen = iscen
+  } else {
+    infname = paste0(moinfolder,iscen,"/estimate_range_",iscen,"_",moyear,"_all.rds")
+    indata = readRDS(infname)
+  }
+  
   modata = rbind(modata,indata)
 }
 
@@ -162,20 +178,26 @@ alldata$scen = droplevels(alldata$scen)
 # Clean house, this takes up a lot of RAM
 rm(temp,tempcot,tempric,tempwht,tempsoy)
 rm(modata,srdata)
+rm(indata)
 
 
 ###############################################################
-repdata = alldata
-repdata <- filter(alldata,Area >= 0.001)
+# repdata = alldata
+repdata <- filter(alldata,Area >= 0.001, dlu %in% usedlusufs)
+rm(alldata)
 repdata$reps = ceiling(repdata$Area/0.002)
 repdata <- repdata[rep(row.names(repdata), repdata$reps), ]
 # plot(ecdf(repdata$Area), xlim = c(0.0,0.01))
 
 crop = "Soybeans"
-# FIXME doesn't work passing crop to filter
-cropdata <- alldata %>% filter(Crop == crop)
+# cropdata <- alldata %>% filter(Crop == crop)
 repcropdata <- repdata %>% filter(Crop == crop)
 
+fracs <- repcropdata %>% group_by(Crop, zonename) %>% 
+  summarise(frac = sum(reps)) #%>% filter(zonename != "OTHR")
+fracs$frac = 100.0*fracs$frac/sum(fracs$frac)
+fracs$zonenamefrac = paste0(fracs$zonename, "(",sprintf("%.1f",fracs$frac),"%)")
+repcropdata = left_join(fracs,repcropdata,by = "zonename")
 
 ggplot(filter(repcropdata, zonename != "OTHR"),
        aes(x = dyld, y = dlu)) + 
@@ -188,8 +210,8 @@ ggplot(filter(repcropdata, zonename != "OTHR"),
   )
 
 ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR"),
-       aes(x = dyld, y = dlu)) + 
-  facet_grid(scen + zonename ~ method) +
+       aes(x = dyld, y = method)) + 
+  facet_grid(scen ~ zonename) +
   geom_density_ridges(aes(fill = zonename, alpha = 0.8), 
                       show.legend = F) +
   theme_ridges() + 
@@ -201,8 +223,17 @@ ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR"),
 
 
 
+# With dlu
 for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
 repcropdata <- repdata %>% filter(Crop == crop)
+
+#This is for getting the area fractions
+fracs <- repcropdata %>% group_by(Crop, zonename) %>% 
+  summarise(frac = sum(reps)) #%>% filter(zonename != "OTHR")
+fracs$frac = 100.0*fracs$frac/sum(fracs$frac)
+fracs$zonenamefrac = paste0(fracs$zonename, "(",sprintf("%.1f",fracs$frac),"%)")
+repcropdata = left_join(fracs,repcropdata,by = "zonename")
+
 plt <- ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR"),
        aes(x = dyld, y = dlu)) + 
   facet_grid(scen + zonename ~ method) +
@@ -216,6 +247,33 @@ plt <- ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR"),
   )
 print(plt)
 }
+
+# Per deltaT only
+for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
+  repcropdata <- repdata %>% filter(Crop == crop)
+  
+  #This is for getting the area fractions
+  fracs <- repcropdata %>% group_by(Crop, zonename) %>% 
+    summarise(frac = sum(reps)) #%>% filter(zonename != "OTHR")
+  fracs$frac = 100.0*fracs$frac/sum(fracs$frac)
+  fracs$zonenamefrac = paste0(fracs$zonename, "(",sprintf("%.1f",fracs$frac),"%)")
+  repcropdata = left_join(fracs,repcropdata,by = "zonename")
+  
+  plt <- ggplot(filter(repcropdata, zonename != "OTHR" & 
+                       scen %in% c("deltaT1", "deltaT3", "deltaT5")),
+                aes(x = dyld, y = method)) + 
+    facet_grid(scen ~ zonenamefrac) +
+    geom_density_ridges(aes(fill = zonename, alpha = 0.8), 
+                        show.legend = F) +
+    theme_ridges() + 
+    labs(x = "Yield change (%)",
+         y = "",
+         title = crop,
+         subtitle = "World combined harvested area"
+    )
+  print(plt)
+}
+
 
 #Testing
 ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR" & !(scen == "deltaT0" & dlu == "0.00")),
@@ -231,6 +289,24 @@ ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR" & !(scen == 
   ) + 
   geom_vline(xintercept = -5)
 
+
+
+for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
+  repcropdata <- repdata %>% filter(Crop == crop)
+  plt <- ggplot(filter(repcropdata, Country == "United States of America" & zonename != "OTHR"),
+  # plt <- ggplot(filter(repcropdata, zonename != "OTHR"),
+                aes(x = dyld, y = scen)) + 
+    facet_grid(zonename ~ method) +
+    geom_density_ridges(aes(fill = zonename, alpha = 0.8), 
+                        show.legend = F) +
+    theme_ridges() + 
+    labs(x = "Yield change (%)",
+         y = "Land use change (pp of whole cell)",
+         title = crop,
+         subtitle = "United States of America"
+    )
+  print(plt)
+}
 # 
 # theme_Publication <- function(base_size=10, base_family="Helvetica") {
 #   

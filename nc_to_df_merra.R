@@ -5,19 +5,19 @@ library(raster)
 library(sf)
 
 calname = "Sacks_ZARC_fill_fill_120d"
-ddversionstring = "wgt_crop"
+ddversionstring = "merra"
 
-infolder  = paste0("sheffield_vpd/",calname,"/")
-outfolder  = paste0("sheffield_dfs_vpd/",calname,"/",ddversionstring,"/")
+infolder  = paste0("merra_computed//",calname,"/")
+outfolder  = paste0("merra_dfs/",calname,"/",ddversionstring,"/")
 # infolder  = "xavier_computed/"
 # outfolder  = "xavier_dfs/"
 
 # Mask only areas with more agricultural area fraction than mskthresh
-mskfname = "cropmap/cropland2000_grid_sheffield.nc"
+mskfname = "cropmap/cropland2000_grid_merra.nc"
 mskthresh = 0.01
 
 # Actual area weights per crop
-areafpref = "cropmap/crops_sheffield/"
+areafpref = "cropmap/crops_merra/"
 areafsuf  = ".HarvestedAreaFraction.nc"
 
 zonfname = "GIS/COLROW30_K_G.shp"
@@ -29,7 +29,9 @@ dir.create(outfolder, showWarnings = FALSE, recursive = TRUE)
 
 crops = c("Maize","Soybeans","Cotton")
 # years = 1991:2008
-years = 2002:2008
+# years = 2002:2008
+years = 2009:2014
+# years = 2010:2014
 
 msk = raster(mskfname)
 msk[msk<mskthresh] <- NA
@@ -72,8 +74,8 @@ for (crop in crops) {
     
     tmaxmean = raster(infname, varname = "tmaxmean")
     tminmean = raster(infname, varname = "tminmean")
-    precmean = raster(infname, varname = "precmean")
-    vpdmean = raster(infname, varname = "vpdmean")
+    # precmean = raster(infname, varname = "precmean")
+    # vpdmean = raster(infname, varname = "vpdmean")
     
     trngmean = raster(infname, varname = "trngmean")
     ndays =  raster(infname, varname = "ndays")
@@ -92,8 +94,8 @@ for (crop in crops) {
     tempmean = as.data.frame(tempmean, xy = TRUE)
     tmaxmean = as.data.frame(tmaxmean, xy = TRUE) 
     tminmean = as.data.frame(tminmean, xy = TRUE) 
-    precmean = as.data.frame(precmean, xy = TRUE)
-    vpdmean = as.data.frame(vpdmean, xy = TRUE)
+    # precmean = as.data.frame(precmean, xy = TRUE)
+    # vpdmean = as.data.frame(vpdmean, xy = TRUE)
     
     trngmean = as.data.frame(trngmean, xy = TRUE) 
     ndays = as.data.frame(ndays, xy = TRUE) 
@@ -104,8 +106,8 @@ for (crop in crops) {
       mutate(pid = group_indices(.,x,y)) %>%
       left_join(tmaxmean, by = c("x","y")) %>% 
       left_join(tminmean, by = c("x","y")) %>% 
-      left_join(precmean, by = c("x","y")) %>%
-      left_join(vpdmean, by = c("x","y")) %>%
+      # left_join(precmean, by = c("x","y")) %>%
+      # left_join(vpdmean, by = c("x","y")) %>%
       left_join(trngmean, by = c("x","y")) %>% 
       left_join(ndays, by = c("x","y")) %>% 
       left_join(tempdist, by = c("x","y")) %>% 
@@ -129,3 +131,4 @@ for (crop in crops) {
   outfname = paste0(outfolder,crop,".climdata.rds")
   saveRDS(allydata,file = outfname)
 }
+

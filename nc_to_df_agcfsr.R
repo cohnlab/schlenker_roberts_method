@@ -5,19 +5,19 @@ library(raster)
 library(sf)
 
 calname = "Sacks_ZARC_fill_fill_120d"
-ddversionstring = "wgt_crop"
+ddversionstring = "agcfsr"
 
-infolder  = paste0("sheffield_vpd/",calname,"/")
-outfolder  = paste0("sheffield_dfs_vpd/",calname,"/",ddversionstring,"/")
+infolder  = paste0("agcfsr_computed//",calname,"/")
+outfolder  = paste0("agcfsr_dfs/",calname,"/",ddversionstring,"/")
 # infolder  = "xavier_computed/"
 # outfolder  = "xavier_dfs/"
 
 # Mask only areas with more agricultural area fraction than mskthresh
-mskfname = "cropmap/cropland2000_grid_sheffield.nc"
+mskfname = "cropmap/cropland2000_grid_agcfsr.nc"
 mskthresh = 0.01
 
 # Actual area weights per crop
-areafpref = "cropmap/crops_sheffield/"
+areafpref = "cropmap/crops_agcfsr/"
 areafsuf  = ".HarvestedAreaFraction.nc"
 
 zonfname = "GIS/COLROW30_K_G.shp"
@@ -25,11 +25,20 @@ zonfname = "GIS/COLROW30_K_G.shp"
 dir.create(outfolder, showWarnings = FALSE, recursive = TRUE)
 
 # crops = c("Soybeans")
-# years = 1991:1993
+# years = 2002:2008
 
 crops = c("Maize","Soybeans","Cotton")
 # years = 1991:2008
+# years = 2002:2008
+# years = 2009:2014
+# years = 2010:2014
+# years = 2002:2003
 years = 2002:2008
+
+# Countries shapefile for filtering
+shpfname = 'GIS/ne_50m_admin_0_countries_lakes.shp'
+
+shp = st_read(shpfname)[c("ADM0_A3","geometry")]
 
 msk = raster(mskfname)
 msk[msk<mskthresh] <- NA
@@ -68,23 +77,30 @@ for (crop in crops) {
       names(areacrop)[3] <- "areacrop"
       areacrop[is.na(areacrop)] <- 0.0
       
+      countrycodes = st_join(st_as_sf(dfzones, coords = c("x","y"), crs = st_crs(shp)),shp)
+      countrycoords = as.data.frame(st_coordinates(countrycodes))
+      names(countrycoords) <- c("x","y")
+      countrycoords$country = countrycodes$ADM0_A3
+      # countrycodes$geometry <- NULL
+      
+      
     }
     
     tmaxmean = raster(infname, varname = "tmaxmean")
     tminmean = raster(infname, varname = "tminmean")
-    precmean = raster(infname, varname = "precmean")
-    vpdmean = raster(infname, varname = "vpdmean")
+    # precmean = raster(infname, varname = "precmean")
+    # vpdmean = raster(infname, varname = "vpdmean")
     
     trngmean = raster(infname, varname = "trngmean")
     ndays =  raster(infname, varname = "ndays")
     
-    tempdist = brick(infname, varname = "tempdist")
+    # tempdist = brick(infname, varname = "tempdist")
     tempgdds = brick(infname, varname = "tempgdds")
-    tempdistzvals = getZ(tempdist)
+    # tempdistzvals = getZ(tempdist)
     tempgddszvals = getZ(tempgdds)
     
-    tempdist = as.data.frame(tempdist, xy = TRUE)
-    colnames(tempdist)[-(1:2)] <- gsub("-","m",paste0("tdi",tempdistzvals))
+    # tempdist = as.data.frame(tempdist, xy = TRUE)
+    # colnames(tempdist)[-(1:2)] <- gsub("-","m",paste0("tdi",tempdistzvals))
     
     tempgdds = as.data.frame(tempgdds, xy = TRUE)
     colnames(tempgdds)[-(1:2)] <- gsub("-","m",paste0("edd",tempgddszvals))
@@ -92,8 +108,8 @@ for (crop in crops) {
     tempmean = as.data.frame(tempmean, xy = TRUE)
     tmaxmean = as.data.frame(tmaxmean, xy = TRUE) 
     tminmean = as.data.frame(tminmean, xy = TRUE) 
-    precmean = as.data.frame(precmean, xy = TRUE)
-    vpdmean = as.data.frame(vpdmean, xy = TRUE)
+    # precmean = as.data.frame(precmean, xy = TRUE)
+    # vpdmean = as.data.frame(vpdmean, xy = TRUE)
     
     trngmean = as.data.frame(trngmean, xy = TRUE) 
     ndays = as.data.frame(ndays, xy = TRUE) 
@@ -104,14 +120,15 @@ for (crop in crops) {
       mutate(pid = group_indices(.,x,y)) %>%
       left_join(tmaxmean, by = c("x","y")) %>% 
       left_join(tminmean, by = c("x","y")) %>% 
-      left_join(precmean, by = c("x","y")) %>%
-      left_join(vpdmean, by = c("x","y")) %>%
+      # left_join(precmean, by = c("x","y")) %>%
+      # left_join(vpdmean, by = c("x","y")) %>%
       left_join(trngmean, by = c("x","y")) %>% 
       left_join(ndays, by = c("x","y")) %>% 
-      left_join(tempdist, by = c("x","y")) %>% 
+      # left_join(tempdist, by = c("x","y")) %>% 
       left_join(tempgdds, by = c("x","y")) %>%
       left_join(dfzones, by = c("x","y")) %>%
       left_join(areacrop, by = c("x","y")) %>%
+      left_join(countrycoords, by = c("x","y")) %>%
       na.omit()
     ydata$year = year
     
@@ -129,3 +146,4 @@ for (crop in crops) {
   outfname = paste0(outfolder,crop,".climdata.rds")
   saveRDS(allydata,file = outfname)
 }
+

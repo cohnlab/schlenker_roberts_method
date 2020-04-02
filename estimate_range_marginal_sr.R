@@ -4,12 +4,13 @@ lapply(Packages, library, character.only = TRUE)
 
 tdbase = "Sacks_ZARC_fill_fill_120d"
 
-versionstring = "tmaxsens_linear1"
+ddversionstring = "agcfsr_bound_usa"
+versionstring = paste0(ddversionstring,"_scaled_1")
 
 tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")
 tmaxbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmx.csv")
 
-betasfolder = paste0("gdd_betas/",tdbase,"/")
+betasfolder = paste0("gdd_betas/",tdbase,"/",ddversionstring,"/")
 
 # Points shapefile, reference raster and region of interest shapefile
 shpfname = "GIS/COLROW30.shp"
@@ -95,12 +96,16 @@ if (itmaxsens) {
 # m = 28.8
 # b = 2
 
-# Linear stepwise
-uplim = 1
-lolim = 0.42
-coef0 = 4.0832
-coef1 = -0.1159
+# # Linear stepwise
+# uplim = 1
+# lolim = 0.42
+# coef0 = 4.0832
+# coef1 = -0.1159
+
+# Linear stepwise per crop
+intmaxsensfname = "tmaxsens/tmaxsens_linear_2_1.5.csv"
 }
+
  
 # Cap for logY impacts, both positive and negative
 icap = FALSE
@@ -121,9 +126,16 @@ if (izoneagt) {
   luefftmax = 3.15*(0.5/0.7)
 }
 
+# FIXME FIXME FIXME FIXME FIXME Dumb loop
+bgtemps = seq(0,5)
+bgtmaxs = seq(0,5)
+
+for (count in 1:length(bgtemps)) {
+bgtemp = bgtemps[count]
+bgtmax = bgtmaxs[count]
 # FIXME: Fixed backgound warming.Substitute for a RCP file
-bgtemp = 0.0
-bgtmax = 0.0
+# bgtemp = 3.0
+# bgtmax = 3.0
 basetit = paste0("BG + ",round(bgtemp),"\u00B0C")
 
 
@@ -137,19 +149,11 @@ scen = paste0("deltaT",bgtemp)
 # Output plots
 outfpref = paste0(outfolder,"/estimate_range_",scen,"_",year)
 
-
-# Output plots
-# outfpref = paste0(outfolder,"/estimate_range_",scen,"_",year)
-
 # The values of change in land use to evaluate. Fractional
-# dlus = c(0.00,1.00)
-# dlus = c(1.00)
-# dlus = c(0.0,0.3)
-# dlus = c(0.0,0.3,1.00)
+
 dlus = c(0.0,0.25,0.5,1.0)
 # dlus = c(0.0)
-# dlus = c(.00,0.05,0.10,0.20,0.3,0.5,1.0)
-# dlus = c(0.00,0.05,0.10,0.20,0.3,1.0)
+
 
 # Grid for arranging the plots
 if (iglobal) {
@@ -387,9 +391,14 @@ for (crop in crops) {
       # # Logistic
       # ydata$tmaxsens = k - (k-a)/(1 + exp(-b*(ydata$tmaxbase-m)))
       # # Stepwise linear
-      ydata$tmaxsens = coef0 + coef1*ydata$tmaxbase
-      ydata$tmaxsens = pmin(uplim, ydata$tmaxsens)
-      ydata$tmaxsens = pmax(lolim, ydata$tmaxsens)
+      # ydata$tmaxsens = coef0 + coef1*ydata$tmaxbase
+      # ydata$tmaxsens = pmin(uplim, ydata$tmaxsens)
+      # ydata$tmaxsens = pmax(lolim, ydata$tmaxsens)
+      # Stepwise linear per crop
+      coeftab = read.csv(intmaxsensfname) %>% filter(Crop == crop)
+      ydata$tmaxsens = coeftab$inter[1] + coeftab$slp[1]*ydata$tmaxbase 
+      ydata$tmaxsens = pmin(1,ydata$tmaxsens)
+      ydata$tmaxsens = pmax(coeftab$minscale[1],ydata$tmaxsens)
       
       
       
@@ -727,11 +736,4 @@ for (crop in crops) {
 # Write table
 write.csv(outdata,paste0(wrtfolder,"/sr_",scen,"_",year,".csv"))
 
-# breaks = classIntervals(na.omit(values(subrast)),n = 9, style="pretty")$brks
-# plotdgdd <- tm_shape(subrast, bbox = bbox) +
-#   tm_raster(palette = "YlOrRd", breaks = breaks,
-#             title = expression(paste(Delta,"GDD"))) +
-#   tm_shape(reg) + tm_borders() +
-#   tm_legend(legend.text.size = 1.0, legend.title.size = 1.5,
-#             legend.outside = T)
-# plotdgdd
+} #FIXME THE DUMB LOOP!!!
