@@ -4,7 +4,7 @@ lapply(Packages, library, character.only = TRUE)
 
 tdbase = "Sacks_ZARC_fill_fill_120d"
 
-ddversionstring = "agcfsr_bound_usa"
+ddversionstring = "agcfsr_unbound_usa"
 versionstring = paste0(ddversionstring,"_scaled_1")
 
 tempbasefname = paste0("../AgroServYield_coefficients/Inputs_coef/",tdbase,"/Tbaseline_tmp.csv")

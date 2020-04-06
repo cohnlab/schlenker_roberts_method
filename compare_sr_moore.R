@@ -4,7 +4,8 @@ lapply(Packages, library, character.only = TRUE)
 
 # Setup for SR
 tdbase = "Sacks_Zarc_fill_fill_120d"
-versionstring = "agcfsr_bound_usa_scaled_1"
+# versionstring = "agcfsr_bound_usa_scaled_1"
+versionstring = "agcfsr_unbound_usa_scaled_1"
 
 # srinfolder = paste0("rasters_sr_memo_global/",tdbase,"/")
 srinfolder = paste0("rasters_sr_memo_global/",tdbase,"/",versionstring,"/")
@@ -259,7 +260,8 @@ for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
   fracs$zonenamefrac = paste0(fracs$zonename, "(",sprintf("%.1f",fracs$frac),"%)")
   repcropdata = left_join(fracs,repcropdata,by = "zonename")
   
-  plt <- ggplot(filter(repcropdata, zonename != "OTHR" & 
+  # plt <- ggplot(filter(repcropdata, zonename != "OTHR" & 
+  plt <- ggplot(filter(repcropdata,  
                        scen %in% c("deltaT1", "deltaT3", "deltaT5")),
                 aes(x = dyld, y = method)) + 
     facet_grid(scen ~ zonenamefrac) +
@@ -295,11 +297,11 @@ for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
   repcropdata <- repdata %>% filter(Crop == crop)
   plt <- ggplot(filter(repcropdata, Country == "United States of America" & zonename != "OTHR"),
   # plt <- ggplot(filter(repcropdata, zonename != "OTHR"),
-                aes(x = dyld, y = scen)) + 
+                aes(x = dyld, y = scen)) +
     facet_grid(zonename ~ method) +
-    geom_density_ridges(aes(fill = zonename, alpha = 0.8), 
+    geom_density_ridges(aes(fill = zonename, alpha = 0.8),
                         show.legend = F) +
-    theme_ridges() + 
+    theme_ridges() +
     labs(x = "Yield change (%)",
          y = "Land use change (pp of whole cell)",
          title = crop,

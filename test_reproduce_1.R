@@ -12,7 +12,8 @@ calname = "Sacks_ZARC_fill_fill_120d"
 # ddversionstring = "merra"
 # ddversionstring = "merra_bound"
 # ddversionstring = "agcfsr_bound"
-ddversionstring = "agcfsr_bound_usa"
+# ddversionstring = "agcfsr_bound_usa"
+ddversionstring = "agcfsr_unbound_usa"
 # ddversionstring = "agmerra_bound"
 # ddversionstring = "agmerra_bound_usa"
 # ddversionstring = "wgt_crop_unbound"
@@ -47,7 +48,7 @@ names(extvnames) <- crops
 names(eddvnames) <- crops
 names(gddvnames) <- crops
 # Should EDDs have an upper bound?
-ieddbound = TRUE
+ieddbound = FALSE
 
 # Cuts (hinges, breaks) of the spline approximation
 cuts = seq(9,37,2)

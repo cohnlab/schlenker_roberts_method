@@ -9,7 +9,8 @@ library(lspline)
 calname = "Sacks_ZARC_fill_fill_120d"
 # ddversionstring = "merra"
 # ddversionstring = "wgt_crop_unbound"
-ddversionstring = "agcfsr_bound_usa"
+# ddversionstring = "dyncuts_agcfsr_unbound_usa"
+ddversionstring = "agcfsr_unbound_usa"
 
 infolder  = paste0("agcfsr_dfs/",calname,"/","agcfsr","/")
 # infolder  = paste0("sheffield_dfs_vpd/",calname,"/",ddversionstring,"/")
@@ -21,8 +22,8 @@ ifiltcnt = TRUE
 filtcnts = c("USA")
 
 # years = 2009:2014
-# years = 2002:2008
-years = 2002:2003
+years = 2002:2008
+# years = 2002:2003
 # years = 1991:2008
 
 # crops = c("Soybeans")
@@ -54,7 +55,8 @@ shp = st_read(shpfname)[c("ADM0_A3","geometry")]
 
 # Functions
 
-#FIXME: This function do not allow for a decreasing last piece to avoid problems with rank-defficiency
+# FIXME: This function DOES allow for a decreasing last piece,
+# problems with rank-defficiency might arise
 lspline_to_betas <- function(fit,cuts) {
   vname = all.vars(formula(fit))[2]
   betas = data.frame(
@@ -97,6 +99,32 @@ lspline_to_betas <- function(fit,cuts) {
   rownames(betas) <- NULL
   return(betas)
 }
+filter_cuts <- function(data,incuts,vname) {  
+  nmin = 100 # Minimum points to estimate the first and last pieces
+  incuts = cutstemp
+  outcuts = incuts
+  vname = "tempmean"
+  # Forward pass
+  n = 0
+  c = 0
+  while(n <= nmin) {
+    c = c+1
+    cdata = filter(data,data[[vname]] < incuts[c])
+    n = nrow(cdata)
+  }
+  outcuts = incuts[c:length(incuts)]
+  # Backward pass
+  n = 0
+  c = length(outcuts)+1
+  while(n <= nmin) {
+    c = c-1
+    cdata = filter(data,data[[vname]] > incuts[c])
+    n = nrow(cdata)
+  }
+  outcuts = outcuts[1:c]
+  return(outcuts)
+}
+
 add_lines_betas <- function(betas) {
   for (i in 1:nrow(betas)) {
     pdata = seq(betas$sta[i],betas$en[i],0.1)
@@ -129,11 +157,9 @@ for (crop in crops) {
   data["nEDD"] <- data["EDD"]/data["ndays"]
   data["nGDD"] <- data["GDD"]/data["ndays"]
   
-  # incuts = cutstemp
-  # outcuts = incuts
-  # vname = "tempmean"
-  # c = 1
-  # filter(data(vname < 10))
+
+  
+  
   # Fit nEDD to Tmax and nGDD to Tavg
   # fitedd = lm(EDD ~ lspline(tmaxmean,cuts), data = data)
   # fitgdd = lm(GDD ~ lspline(tempmean,cuts), data = data)
@@ -141,8 +167,8 @@ for (crop in crops) {
   fitgdd = lm(GDD ~ lspline(tempmean,cutstemp), data = data, weights = areacrop)
   
   # Convert to table of intercepts and slopes using the function lspline_to_betas
-  betasedd = lspline_to_betas(fitedd,cuts)
-  betasgdd = lspline_to_betas(fitgdd,cuts)
+  betasedd = lspline_to_betas(fitedd,cutstmax)
+  betasgdd = lspline_to_betas(fitgdd,cutstemp)
   
   # Add the plots and lines
   with(data,plot(tmaxmean,EDD,main=crop,pch='.', cex = 2.0))
