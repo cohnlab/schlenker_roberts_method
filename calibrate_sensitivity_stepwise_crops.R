@@ -204,9 +204,13 @@ for (crop in crops) {
              size = 5, hjust = 0, vjust = 0) +
     annotate(geom = "text", x = 15, y = 0.6, size = 5, hjust = 0, vjust = 0, 
              label = paste0("US Tmax: ",sprintf("%.1f",loreftmx))) +
+    annotate(geom = "text", x = 15, y = 0.55, size = 5, hjust = 0, vjust = 0, 
+             label = paste0("US reference impact: ",sprintf("%.1f",refval/refmult),"%")) +
     annotate(geom = "text", x = 15, y = 0.4, size = 5, hjust = 0, vjust = 0, 
-             label = paste0("BR Tmax: ",sprintf("%.1f",hireftmx)))
-  
+             label = paste0("BR Tmax: ",sprintf("%.1f",hireftmx))) +
+    annotate(geom = "text", x = 15, y = 0.35, size = 5, hjust = 0, vjust = 0, 
+             label = paste0("BR reference impact: ",sprintf("%.1f",refval),"%"))
+    
   plots_range[[length(plots_range)+1]] = plotrange
   plots_fun[[length(plots_fun)+1]] = plotfun
   
