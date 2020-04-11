@@ -40,3 +40,11 @@ GIS
 cropmap
 cropmap/
 rasters_sr_memo_global/
+agcfsr_calendars/
+bcagcfsr_calendars/
+agmerra_calendars/
+merra_calendars/
+bcagcfsr_computed_partial/
+rgagcfsr_computed_partial/
+bcagcfsr_dfs_partial/
+rgagcfsr_dfs_partial/
