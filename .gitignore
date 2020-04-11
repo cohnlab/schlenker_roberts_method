@@ -44,7 +44,14 @@ agcfsr_calendars/
 bcagcfsr_calendars/
 agmerra_calendars/
 merra_calendars/
+agcfsr_computed_partial/
 bcagcfsr_computed_partial/
 rgagcfsr_computed_partial/
+agcfsr_dfs_partial/
 bcagcfsr_dfs_partial/
 rgagcfsr_dfs_partial/
+gdd_betas_pixel/
+gdd_betas_pixel_partial/
+vpd_scaling/
+tmaxsens/
+scenario_tables/

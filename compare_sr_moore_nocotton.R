@@ -16,11 +16,13 @@ imolegacy = TRUE
 
 # srscens = c("deltaT0","deltaT1","deltaT2")
 srscens = c("deltaT0","deltaT1","deltaT2","deltaT3","deltaT4","deltaT5")
-srcrops = c("Maize","Soybeans","Cotton")
+srcrops = c("Maize","Soybeans")
 
 # moscens = c("deltaTssp0","deltaT1degC","deltaT2degC")
 moscens = c("deltaT0","deltaT1","deltaT2","deltaT3","deltaT4","deltaT5")
 mocrops = c("Maize","Rice","Wheat")
+
+allcrops = c("Soybeans","Maize","Wheat","Rice")
 
 names(moscens) <- srscens
 
@@ -58,14 +60,15 @@ srdata = gather(srdata,dlu,dyld,paste0("dyppDLU",dlusufs),factor_key = T)
 levels(srdata$dlu) <- regmatches(levels(srdata$dlu),regexpr("[0-9].[0-9][0-9]",levels(srdata$dlu)))
 
 # Build the Moore crops with SR estimates
-tempcot = filter(srdata,Crop == "Cotton")
+tempcot = filter(srdata,Crop == "Cotton") # FIXME: We're just reading Cotton and ignoring it here
 names(tempcot)[names(tempcot) == "dyld"] <- "V1"
 tempcot$Crop <- NULL
 tempsoy = filter(srdata,Crop == "Soybeans")
 names(tempsoy)[names(tempsoy) == "dyld"] <- "V2"
 tempsoy$Crop <- NULL
 temp = left_join(tempcot,tempsoy)
-temp$dyld = (temp$V1 + temp$V2)/2.0
+# temp$dyld = (temp$V1 + temp$V2)/2.0 
+temp$dyld = temp$V2
 temp$V1 <- NULL
 temp$V2 <- NULL
 temp$Crop = "Rice"
@@ -114,8 +117,8 @@ temp$V1 <- NULL
 temp$V2 <- NULL
 temp$Crop = "Soybeans"
 modata = rbind(modata,temp)
-temp$Crop = "Cotton"
-modata = rbind(modata,temp)
+# temp$Crop = "Cotton"
+# modata = rbind(modata,temp) # Don't build Cotton
 
 modata$method = "Moore"
 
@@ -132,7 +135,12 @@ convdata = read.csv(convfname)
 
 wgtdata = left_join(wgtdata,convdata, by = c("ID" = "final.ID"))
 
-alldata = left_join(alldata,wgtdata, by = c("COLROW30" = "final.COLROW30", "Crop" = "Crop"))
+# FIXME: Dirty fix for changing areas.csv files
+if (any(names(wgtdata) == "final.COLROW30")) {
+  alldata = left_join(alldata,wgtdata, by = c("COLROW30" = "final.COLROW30", "Crop" = "Crop"))
+}else{
+  alldata = left_join(alldata,wgtdata, by = c("COLROW30" = "COLROW30", "Crop" = "Crop"))
+}
 
 zonesshp = st_read(zonesfname)
 zonesshp$zonename <- NA
@@ -225,7 +233,7 @@ ggplot(filter(repcropdata, Country == "Brazil" & zonename != "OTHR"),
 
 
 # With dlu
-for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
+for (crop in allcrops) {
 repcropdata <- repdata %>% filter(Crop == crop)
 
 #This is for getting the area fractions
@@ -250,7 +258,7 @@ print(plt)
 }
 
 # Per deltaT only
-for (crop in c("Soybeans","Maize","Wheat","Cotton","Rice")) {
+for (crop in allcrops) {
   repcropdata <- repdata %>% filter(Crop == crop)
   
   #This is for getting the area fractions

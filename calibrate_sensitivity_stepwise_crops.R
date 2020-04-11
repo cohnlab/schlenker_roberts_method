@@ -47,9 +47,14 @@ srrefdata = read.csv("aux_figures/test_table_A5.csv") %>% filter(source == "SR T
 
 # GLOBIOM grid, points shapefile and reference for rasterization
 shpfname = "GIS/COLROW30.shp"
+cntfname = 'GIS/ne_50m_admin_0_countries_lakes.shp'
 reffname = "../AgroServYield_coefficients/Inputs_Tbaseline/cru_tmp.nc"
 
 shp = st_read(shpfname)
+cntshp = st_read(cntfname)
+st_crs(shp) <- st_crs(cntshp)
+shp = st_join(shp,cntshp)[c("COLROW30","ADM0_A3")]
+
 refrast = raster(reffname)
 
 # Plot maps of impacts on the GLOBIOM grid
@@ -63,6 +68,9 @@ tempbase = read.csv(tempbasefname) %>% gather("Crop","tempbase",-ID)
 tmaxbase = read.csv(tmaxbasefname) %>% gather("Crop","tmaxbase",-ID)
 tempdata = left_join(tmaxbase,tempbase, by = c("ID","Crop"))
 
+areadata = read.csv("GIS/areas.csv")
+shp = left_join(shp,areadata, by = "COLROW30")
+shp$COLROW30 = as.factor(shp$COLROW30)
 
 dir.create(outfolder,showWarnings = F, recursive = T)
 
@@ -110,6 +118,7 @@ eval_scaled_step_point_tmp <- function(tmx,tmp,deltat,cropcoeftab) {
 
 
 coeftab = data.frame()
+repdata = data.frame()
 plots_range = list()
 plots_fun = list()
 croprasts = list()
@@ -242,6 +251,13 @@ for (crop in crops) {
     print(plotobj)
     # ggsave(paste0(outfolder,"maps_",crop,".png"), plot = plotobj)
     
+    uscropdata = cropshp %>% filter(ADM0_A3 == "USA") 
+    
+    for (i in 1:length(deltats)) {
+      v = sum(uscropdata[[scennames[i]]]*uscropdata[[crop]],na.rm=T)/sum(uscropdata[[crop]],na.rm=T)
+      vdata = data.frame(deltat = deltats[i], Crop = crop, dyld = v, source = "Impact average")
+      repdata = rbind(vdata,repdata)
+    }
   }
 }
 
@@ -264,9 +280,20 @@ if (iglobplot) {
     tm_facets(nrow = 3, ncol = 2)
   print(plotobj)
   
+  
+  
   write.csv(coeftab, file = outfname, row.names = F)
 }
 
+allrepdata = rbind(srrefdata,repdata)
+allrepdata %>% 
+  filter(source !=  "Average Tbaselines") %>%
+  ggplot() + 
+  geom_line(aes(x = deltat, y = dyld, color = Crop, linetype = source), size = 2) +
+  xlim(1,6) +
+  ylim(-60,10) +
+  ggtitle("U.S. Area weighted impact averages")
+  
 # plots_all = list()
 # for (i in seq(1,(2*length(plots_range)),2)) {
 #   plots_all[i] = plot
