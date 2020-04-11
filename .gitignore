@@ -4,7 +4,17 @@ merra_calendars/
 merra_computed/
 xavier/
 xavier_calendars/
+agcfsr_computed/
+bcagcfsr_computed/
+agmerra_computed/
+merra_computed/
+agcfsr_dfs/
+bcagcfsr_dfs/
+agmerra_dfs/
+merra_dfs/
+rgagcfsr_dfs/
 xavier_computed/
+rgagcfsr_computed/
 xavier_dfs/
 sheffield/
 sheffield_calendars/
