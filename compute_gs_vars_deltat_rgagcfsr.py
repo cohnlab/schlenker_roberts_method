@@ -26,7 +26,7 @@ infolder = "D:/data/rgAgCFSR/regrid/"
 
 calname = "Sacks_ZARC_fill_fill_120d"
 
-outfolder = "rgagcfsr_computed_partial/"+calname+"/"
+outfolder = "rgagcfsr_computed/"+calname+"/"
 
 masterpref = "AgCFSR_"
 tempsuf = "_tavg.nc4"
