@@ -292,7 +292,21 @@ allrepdata %>%
   geom_line(aes(x = deltat, y = dyld, color = Crop, linetype = source), size = 2) +
   xlim(1,6) +
   ylim(-60,10) +
-  ggtitle("U.S. Area weighted impact averages")
+  ggtitle("U.S. Area weighted impact averages", subtitle = ddversionstring)
+
+allrepdata %>% spread(source,dyld) %>% 
+  mutate(error = 100.0*(`Impact average` - `SR Table A5`)/`SR Table A5`) %>%
+  ggplot() + geom_line(aes(x=deltat,y=error,color=Crop),size=2) +
+  xlim(0,6) +
+  ggtitle("Error in the U.S.", subtitle = ddversionstring)
+
+allrepdata %>% 
+  filter(source %in%  c("Average Tbaselines","SR Table A5")) %>%
+  ggplot() + 
+  geom_line(aes(x = deltat, y = dyld, color = Crop, linetype = source), size = 2) +
+  xlim(1,6) +
+  ylim(-60,10) +
+  ggtitle("U.S.average temperature impacts", subtitle = ddversionstring)
   
 # plots_all = list()
 # for (i in seq(1,(2*length(plots_range)),2)) {
