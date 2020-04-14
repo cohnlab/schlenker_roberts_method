@@ -3,23 +3,24 @@
 library(tidyverse)
 library(raster)
 library(sf)
+library(broom)
 
 calname = "Sacks_ZARC_fill_fill_120d"
 # ddversionstring = "bcagcfsr"
-ddversionstring = "bcagcfsr_bound_1"
+ddversionstring = "rgagcfsr_bound_1"
 
-infolder  = paste0("bcagcfsr_dfs/",calname,"/bcagcfsr/")
+infolder  = paste0("rgagcfsr_dfs/",calname,"/rgagcfsr/")
 outfolder = paste0("gdd_betas_pixel/",calname,"/",ddversionstring,"/")
 # infolder  = "xavier_computed/"
 # outfolder  = "xavier_dfs/"
 
 dir.create(outfolder, showWarnings = FALSE, recursive = TRUE)
 
-# crops = c("Soybeans")
+#crops = c("Soybeans")
 # years = 2002:2008
 
 crops = c("Maize","Soybeans","Cotton")
-years = 2002:2008
+years = 1995:2005
 # years = 2002:2002
 deltats = 0:5 # Must get zero
 
@@ -33,7 +34,7 @@ names(extvnames) <- crops
 names(eddvnames) <- crops
 names(gddvnames) <- crops
 # Should EDDs have an upper bound?
-ieddbound = FALSE
+ieddbound = TRUE
 
 # Points shapefile
 shpfname = 'GIS/COLROW30.shp'
