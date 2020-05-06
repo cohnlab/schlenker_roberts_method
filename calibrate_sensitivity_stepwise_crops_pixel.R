@@ -162,8 +162,9 @@ allrepdata = rbind(srrefdata,repdata)
 
 ggplot(allrepdata) + 
   geom_line(aes(x = deltat, y = dyld, color = Crop, linetype = source),size=2) +
-  xlim(0,6) +
-  ylim(-150,0)
+  xlim(1,6) +
+  ylim(-100,10) +
+  ggtitle("U.S. Area weighted impact averages", subtitle = ddversionstring)
 
 usshpdata = cntshp %>% filter(ADM0_A3 == "USA") %>% left_join(usdata)
 

@@ -6,8 +6,8 @@ source("eval_nxdd.R")
 
 tdbase = "Sacks_ZARC_fill_fill_120d"
 
-ddversionstring = "agcfsr_unbound_usa"
-# ddversionstring = "agcfsr_bound_usa"
+# ddversionstring = "agcfsr_unbound_usa"
+ddversionstring = "agcfsr_bound_usa"
 # ddversionstring = "merra"
 # ddversionstring = "wgt_crop"
 # ddversionstring = "wgt_crop_un1bound"
@@ -182,7 +182,7 @@ for (crop in crops) {
   pdata$tmp = fittmx$coefficients[[1]] + pdata$tmx*fittmx$coefficients[[2]]
   dumdata = pdata
   pdata = data.frame()
-  for (dt in seq(0,6,0.5)) {
+  for (dt in seq(0,10,0.5)) {
     dumdata$deltat = dt
     pdata = rbind(pdata,dumdata)
   }
@@ -197,7 +197,7 @@ for (crop in crops) {
     xlab(expression(paste(Delta,"T (°C)"))) +
     ylab(expression(paste(Delta,"T (pp)"))) +
     scale_colour_discrete(name="Tmax") +
-    labs(title = crop) + ylim(-80,50)
+    labs(title = crop) + ylim(-200,50)
   
   # Plot the actual scalesens function
   dumdata = data.frame(tmx = seq(15,40,0.1))
@@ -282,7 +282,7 @@ if (iglobplot) {
   
   
   
-  write.csv(coeftab, file = outfname, row.names = F)
+  # write.csv(coeftab, file = outfname, row.names = F)
 }
 
 allrepdata = rbind(srrefdata,repdata)
@@ -291,7 +291,7 @@ allrepdata %>%
   ggplot() + 
   geom_line(aes(x = deltat, y = dyld, color = Crop, linetype = source), size = 2) +
   xlim(1,6) +
-  ylim(-60,10) +
+  ylim(-100,10) +
   ggtitle("U.S. Area weighted impact averages", subtitle = ddversionstring)
 
 allrepdata %>% spread(source,dyld) %>% 

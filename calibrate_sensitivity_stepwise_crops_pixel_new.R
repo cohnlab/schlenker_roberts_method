@@ -12,9 +12,10 @@ calname = "Sacks_ZARC_fill_fill_120d"
 # ddversionstring = "agcfsr_test_small"
 # ddversionstring = "rgagcfsr"
 # ddversionstring = "rgagcfsr_1981_2008"
-ddversionstring = "rgagcfsr_1995_2005"
+ddversionstring = "rgagcfsr_bound_1995_2005"
+# ddversionstring = "rgagcfsr_unbound_1995_2005"
 
-betasfolder = paste0("gdd_betas_pixel_partial/",calname,"/",ddversionstring,"/")
+betasfolder = paste0("gdd_betas_pixel/",calname,"/",ddversionstring,"/")
 # infolder  = "xavier_computed/"
 # outfolder  = "xavier_dfs/"
 
@@ -78,16 +79,16 @@ eval_dd <-
     names(out) <- paste0("d",ddname)
     return(out)
   }
-# Evaluates PARTIAL method dyld (fractional) in a data frame given sensitivities and a fixed scale factor
+# Evaluates dyld (fractional) in a data frame given sensitivities and a fixed scale factor
 # Must decide whether to use fgff or cgdd
 eval_partial_dyld_fixscale <- 
   function(data,cropeddsens,cropgddsens,scalesens,deltat) {
-    dyld = eval_dd(data, "agdd", deltat)*cropgddsens + 
-      eval_dd(data, "bgdd", deltat)*cropeddsens +
-      eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
+    # dyld = eval_dd(data, "agdd", deltat)*cropgddsens +
+    #   eval_dd(data, "bgdd", deltat)*cropeddsens +
+    #   eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
     
-    # dyld = eval_dd(data, "gdd", deltat)*cropgddsens +
-    # eval_dd(data, "edd", deltat)*cropeddsens*scalesens
+    dyld = eval_dd(data, "GDD", deltat)*cropgddsens +
+    eval_dd(data, "EDD", deltat)*cropeddsens*scalesens
     names(dyld) <- "dyld"
     return(dyld)
   }
@@ -100,9 +101,11 @@ eval_partial_dyld_stepscale <-
     scalesens = pmin(1,scalesens)
     scalesens = pmax(minscale[1],scalesens)
     
-    dyld = eval_dd(data, "agdd", deltat)*cropgddsens + 
-      eval_dd(data, "bgdd", deltat)*cropeddsens +
-      eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
+    # dyld = eval_dd(data, "agdd", deltat)*cropgddsens + 
+      # eval_dd(data, "bgdd", deltat)*cropeddsens +
+      # eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
+    dyld = eval_dd(data, "GDD", deltat)*cropgddsens + 
+      eval_dd(data, "EDD", deltat)*cropeddsens*scalesens
     names(dyld) <- "dyld"
     return(dyld)
   }
@@ -170,9 +173,11 @@ brrepdata = data.frame()
 for (crop in crops) {
 # for (crop in c("Soybeans","Maize")) {
   # Read betas for that crop
-  vnames = c("agdd","bgdd","cgdd","fgdd")
+  # vnames = c("agdd","bgdd","cgdd","fgdd")
+  vnames = c("GDD","EDD")
   for (vname in vnames) {
-    betas = read.csv(paste0(betasfolder,"/",crop,".betas.",vname,".csv"))
+    # betas = read.csv(paste0(betasfolder,"/",crop,".betas.",vname,".csv"))
+    betas = read.csv(paste0(betasfolder,"/",crop,".betas",vname,".csv"))
     names(betas)[-1] <- paste0(vname,names(betas)[-1])
     if (vname == vnames[1]) {
       allbetas = betas
@@ -197,11 +202,12 @@ for (crop in crops) {
     summarise(tmaxmean = weighted.mean(tmaxbase,area)) %>% as.numeric()
   ustmax = usdata %>% na.omit() %>%
     summarise(tmaxmean = weighted.mean(tmaxbase,area)) %>% as.numeric()
-  
+
+  # FIXME JUST OVERRIDING SCALING  
   rootobj = uniroot(function(x) {eval_fraction_minscale(
     cropdata,eddsens[[crop]],gddsens[[crop]],refdeltat,ustmax,brtmax,x) - refmult},
                     c(0,1))
-  
+
   minscale = rootobj$root
   cropcoeftab = coeftab_from_minscale(ustmax,brtmax,minscale)
   
@@ -360,29 +366,22 @@ bothdata %>% filter(source == "New Approach scaled") %>%
 # f1(sminscale,-0.4,sinter)
 
 
-f1 = function(minscale,slp,inter) {
-  dum = eval_dyld_countries_stepscale(cropdata,c("USA","BRA"),eddsens[[crop]],gddsens[[crop]],3,minscale,slp,inter)
-  usval = as.numeric(dum[dum$ADM0_A3 == "USA","dyld"])
-  brval = as.numeric(dum[dum$ADM0_A3 == "BRA","dyld"])
-  return(c(usval,brval,brval/usval))
-}
-
-pltfun = function(minscale,slp,inter) {
-  pdata = data.frame(tmax = seq(15,40,0.1))
-  pdata$scalesens = inter + slp*pdata$tmax
-  pdata$scalesens = pmin(1,pdata$scalesens)
-  pdata$scalesens = pmax(0,pdata$scalesens)
-  ggplot(pdata) + geom_line(aes(x=tmax,y=scalesens)) + ylim(0,1)
-}
-
-pltfun(sminscale,-0.3,5)
-
-lotmax = 20
-hitmax = 32
-minscale = 0.5
-fit=lm(scalesens~tmax,data.frame(tmax=c(lotmax,hitmax),scalesens=c(1,minscale)))
-f1(minscale,fit$coefficients[2],fit$coefficients[1])
-
+# f1 = function(minscale,slp,inter) {
+#   dum = eval_dyld_countries_stepscale(cropdata,c("USA","BRA"),eddsens[[crop]],gddsens[[crop]],3,minscale,slp,inter)
+#   usval = as.numeric(dum[dum$ADM0_A3 == "USA","dyld"])
+#   brval = as.numeric(dum[dum$ADM0_A3 == "BRA","dyld"])
+#   return(c(usval,brval,brval/usval))
+# }
+# 
+# pltfun = function(minscale,slp,inter) {
+#   pdata = data.frame(tmax = seq(15,40,0.1))
+#   pdata$scalesens = inter + slp*pdata$tmax
+#   pdata$scalesens = pmin(1,pdata$scalesens)
+#   pdata$scalesens = pmax(0,pdata$scalesens)
+#   ggplot(pdata) + geom_line(aes(x=tmax,y=scalesens)) + ylim(0,1)
+# }
+# 
+# pltfun(sminscale,-0.3,5)
 
 
 # deltats = seq(1,6)

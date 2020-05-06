@@ -12,9 +12,10 @@ calname = "Sacks_ZARC_fill_fill_120d"
 # ddversionstring = "agcfsr_test_small"
 # ddversionstring = "rgagcfsr"
 # ddversionstring = "rgagcfsr_1981_2008"
-ddversionstring = "rgagcfsr_1995_2005"
+ddversionstring = "rgagcfsr_bound_1995_2005"
+# ddversionstring = "rgagcfsr_unbound_1995_2005"
 
-betasfolder = paste0("gdd_betas_pixel_partial/",calname,"/",ddversionstring,"/")
+betasfolder = paste0("gdd_betas_pixel_fill/",calname,"/",ddversionstring,"/")
 # infolder  = "xavier_computed/"
 # outfolder  = "xavier_dfs/"
 
@@ -24,6 +25,7 @@ betasfolder = paste0("gdd_betas_pixel_partial/",calname,"/",ddversionstring,"/")
 # years = 2002:2008
 
 crops = c("Maize","Soybeans","Cotton")
+# crops = c("Maize","Soybeans")
 # years = 2002:2008
 # years = 2002:2003
 # deltats = 0:5 # Must get zero
@@ -60,7 +62,10 @@ iplotglobal = TRUE
 
 # Points shapefile
 shpfname = 'GIS/COLROW30.shp'
+
+# Countries and regions shapefiles
 cntfname = 'GIS/ne_50m_admin_0_countries_lakes.shp'
+brregfname = 'GIS/regions_br.shp'
 
 # Reference raster
 reffname = "../AgroServYield_coefficients/Inputs_Tbaseline/cru_tmp.nc"
@@ -78,16 +83,18 @@ eval_dd <-
     names(out) <- paste0("d",ddname)
     return(out)
   }
-# Evaluates PARTIAL method dyld (fractional) in a data frame given sensitivities and a fixed scale factor
+# Evaluates dyld (fractional) in a data frame given sensitivities and a fixed scale factor
 # Must decide whether to use fgff or cgdd
 eval_partial_dyld_fixscale <- 
   function(data,cropeddsens,cropgddsens,scalesens,deltat) {
-    dyld = eval_dd(data, "agdd", deltat)*cropgddsens + 
-      eval_dd(data, "bgdd", deltat)*cropeddsens +
-      eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
+    # dyld = eval_dd(data, "agdd", deltat)*cropgddsens +
+    #   eval_dd(data, "bgdd", deltat)*cropeddsens +
+    #   eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
     
-    # dyld = eval_dd(data, "gdd", deltat)*cropgddsens +
-    # eval_dd(data, "edd", deltat)*cropeddsens*scalesens
+    dyld = eval_dd(data, "GDD", deltat)*cropgddsens +
+    eval_dd(data, "EDD", deltat)*cropeddsens*scalesens
+    dyld = exp(dyld)-1
+    # names(dyld) <- "dyld"
     names(dyld) <- "dyld"
     return(dyld)
   }
@@ -100,9 +107,12 @@ eval_partial_dyld_stepscale <-
     scalesens = pmin(1,scalesens)
     scalesens = pmax(minscale[1],scalesens)
     
-    dyld = eval_dd(data, "agdd", deltat)*cropgddsens + 
-      eval_dd(data, "bgdd", deltat)*cropeddsens +
-      eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
+    # dyld = eval_dd(data, "agdd", deltat)*cropgddsens + 
+      # eval_dd(data, "bgdd", deltat)*cropeddsens +
+      # eval_dd(data, "fgdd", deltat)*cropeddsens*scalesens
+    dyld = eval_dd(data, "GDD", deltat)*cropgddsens + 
+      eval_dd(data, "EDD", deltat)*cropeddsens*scalesens
+    dyld = exp(dyld)-1
     names(dyld) <- "dyld"
     return(dyld)
   }
@@ -144,10 +154,33 @@ eval_fraction_minscale <-
 
 # Reading shapefiles and creating country table
 shp = st_read(shpfname)
+
 cntshp = st_read(cntfname)
 st_crs(shp) <- st_crs(cntshp)
-cntshp = st_join(shp,cntshp)[c("COLROW30","ADM0_A3")]
+
+brregshp = st_read(brregfname) %>% dplyr::rename(RegionBR = "Region")
+st_crs(brregshp) <- st_crs(cntshp)
+
+cntshp = st_join(shp,cntshp)[c("COLROW30","ADM0_A3","NAME")] 
 cntdata = cntshp %>% st_set_geometry(NULL)
+
+regshp = cntshp %>% st_join(brregshp) %>%
+  mutate(RegionBR = as.character(RegionBR),
+         ADM0_A3 = as.character(ADM0_A3),
+         NAME = as.character(NAME)) %>%
+  mutate(Region = case_when(
+    ADM0_A3 == "BRA" & is.na(RegionBR) ~ "RestOfBR",
+    ADM0_A3 == "BRA" & !is.na(RegionBR) ~ RegionBR ,
+    ADM0_A3 == "IDN" ~ NAME,
+    ADM0_A3 == "IND" ~ NAME,
+    ADM0_A3 == "CHN" ~ NAME,
+  )) %>%
+  mutate(Region = ifelse(is.na(Region),ADM0_A3,Region)) %>%
+  dplyr::select(-RegionBR,-id)
+regdata = regshp %>% st_set_geometry(NULL)
+
+useregs = c("MT","SouthernBR","MATOPIBA","USA","Indonesia","India","China")
+# regdata %>% filter(Region %in% useregs) %>% group_by(Region) %>% summarise
 
 # Reference raster
 refrast = raster(reffname)
@@ -163,16 +196,20 @@ tempdata = left_join(tmaxbase,tempbase, by = c("ID","Crop")) %>%
 
 areadata = read.csv("GIS/areas.csv")
 
+plots_range = list()
 repdata = data.frame()
 brrepdata = data.frame()
+allregdata = data.frame()
 
 # crop = "Soybeans"
 for (crop in crops) {
 # for (crop in c("Soybeans","Maize")) {
   # Read betas for that crop
-  vnames = c("agdd","bgdd","cgdd","fgdd")
+  # vnames = c("agdd","bgdd","cgdd","fgdd")
+  vnames = c("GDD","EDD")
   for (vname in vnames) {
-    betas = read.csv(paste0(betasfolder,"/",crop,".betas.",vname,".csv"))
+    # betas = read.csv(paste0(betasfolder,"/",crop,".betas.",vname,".csv"))
+    betas = read.csv(paste0(betasfolder,"/",crop,".betas",vname,".csv"))
     names(betas)[-1] <- paste0(vname,names(betas)[-1])
     if (vname == vnames[1]) {
       allbetas = betas
@@ -183,11 +220,42 @@ for (crop in crops) {
   
   
   cropareadata = areadata[c("COLROW30",crop)] %>% dplyr::rename(area = crop)
-  cropdata = cntdata %>% 
+  # cropdata = cntdata %>%
+  cropdata = regdata %>% 
     left_join(cropareadata) %>% 
     left_join(allbetas) %>% 
     left_join(filter(tempdata,Crop == crop)) %>%
     mutate(COLROW30 = as.factor(COLROW30))
+  
+  cropdata = cropdata %>% na.omit() %>% group_by(Region) %>% 
+    summarise(regtbase = weighted.mean(tempbase,area)) %>%
+    ungroup %>% left_join(cropdata,. , by = "Region") %>% 
+    mutate(RegionTemp = paste0(Region,"(",sprintf("%.1f",regtbase),"°C)"))
+  
+  
+  cropregdata = data.frame()
+  for (deltat in 0:10) {
+    cropdata$dyld = as.numeric(as.matrix(eval_partial_dyld_fixscale(cropdata,eddsens[[crop]],gddsens[[crop]],1,deltat)))
+    dumdata = cropdata %>% na.omit %>%
+      group_by(RegionTemp) %>% 
+      summarise(dyldmean = weighted.mean(dyld,area), Region = first(Region)) %>%
+      mutate(deltat = deltat)
+    cropregdata = rbind(cropregdata,dumdata)
+    cropdata$dyld <- NULL
+  }
+  cropregdata$Crop = crop
+  allregdata = rbind(allregdata,cropregdata)
+  
+  # Plot the estimated range of impacts
+  plotrange = cropregdata %>%
+    filter(Region %in% useregs) %>%
+    ggplot() + 
+    geom_line(aes(x = deltat, y = dyldmean*100, color = as.factor(RegionTemp)), size = 1.5) + 
+    xlab(expression(paste(Delta,"T (°C)"))) +
+    ylab(expression(paste(Delta,"T (pp)"))) +
+    scale_colour_discrete(name="Tmax") +
+    labs(title = crop) + ylim(-100,10)
+  plots_range[[length(plots_range)+1]] = plotrange
   
   # data = filter(cropdata,COLROW30 %in% c("252 - 212", "253 - 212"))
   usdata = filter(cropdata, ADM0_A3 == "USA")
@@ -197,15 +265,19 @@ for (crop in crops) {
     summarise(tmaxmean = weighted.mean(tmaxbase,area)) %>% as.numeric()
   ustmax = usdata %>% na.omit() %>%
     summarise(tmaxmean = weighted.mean(tmaxbase,area)) %>% as.numeric()
+
+  # FIXME JUST OVERRIDING SCALING
+  minscale = 1
+  # rootobj = uniroot(function(x) {eval_fraction_minscale(
+  #   cropdata,eddsens[[crop]],gddsens[[crop]],refdeltat,ustmax,brtmax,x) - refmult},
+  #                   c(0,1))
+  # 
+  # minscale = rootobj$root
   
-  rootobj = uniroot(function(x) {eval_fraction_minscale(
-    cropdata,eddsens[[crop]],gddsens[[crop]],refdeltat,ustmax,brtmax,x) - refmult},
-                    c(0,1))
-  
-  minscale = rootobj$root
   cropcoeftab = coeftab_from_minscale(ustmax,brtmax,minscale)
   
   
+
   
   for (deltat in 0:10) {
     usdata[paste0("dyld",deltat)] = eval_partial_dyld_fixscale(usdata,eddsens[[crop]],gddsens[[crop]],1.0,deltat)
@@ -225,8 +297,11 @@ for (crop in crops) {
     brrepdata = rbind(brrepdata, data.frame(deltat = deltat, Crop = crop, dyld = out*100, source = "New Approach scaled"))
   }
   
+  
+  
+  
   if (iplotglobal) {
-    deltats = seq(1,6)
+    deltats = seq(1,8)
     scennames = paste0("deltaT",sprintf("%1i",deltats))
     for (i in 1:length(deltats)) {
       cropdata[scennames[i]] = eval_partial_dyld_fixscale(cropdata,eddsens[[crop]],gddsens[[crop]],1.0,deltats[i])*100.0
@@ -251,51 +326,73 @@ for (crop in crops) {
       tm_layout(panel.show = T, panel.labels = scennames,
                 panel.label.size = 1.2,
                 main.title.position = "center", main.title = tit, main.title.size = 1.0) +
-      tm_facets(nrow = 3, ncol = 2)
+      tm_facets(nrow = 4, ncol = 2)
     print(plotobj)
     
-    # SCALED
-    for (i in 1:length(deltats)) {
-      cropdata[scennames[i]] = eval_partial_dyld_stepscale(cropdata,eddsens[[crop]],gddsens[[crop]],deltats[i],cropcoeftab$inter,cropcoeftab$slp,cropcoeftab$minscale)*100.0
-    }
-    cropshp = left_join(shp,filter(cropdata,Crop == crop),by = c("COLROW30" = "COLROW30"))
-    valid = scennames
-    croprast = rasterize(cropshp, refrast, field = valid, fun = mean, background = NA_real_,
-                         by = NULL)
-    # croprasts[[crop]] <- croprast
-    
-    breaks = seq(-100,100,20)
-    pal = brewer.pal(n = length(breaks), name = "RdBu")
-    tit = paste0(crop," (New Approach scaled)")
-    breaks = c(-300,breaks,300)
-    pal = c("#FF00FF",pal,"#00FFFF")
-    
-    plotobj <- tm_shape(croprast, bbox = c(-130,160,-50,65)) + 
-      tm_raster(palette = pal, breaks = breaks, midpoint=0,
-                title = expression(paste(Delta,"Yield (%)"))) + 
-      tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
-                legend.outside = T) + 
-      tm_layout(panel.show = T, panel.labels = scennames,
-                panel.label.size = 1.2,
-                main.title.position = "center", main.title = tit, main.title.size = 1.0) +
-      tm_facets(nrow = 3, ncol = 2)
-    print(plotobj)
+    # # SCALED
+    # for (i in 1:length(deltats)) {
+    #   cropdata[scennames[i]] = eval_partial_dyld_stepscale(cropdata,eddsens[[crop]],gddsens[[crop]],deltats[i],cropcoeftab$inter,cropcoeftab$slp,cropcoeftab$minscale)*100.0
+    # }
+    # cropshp = left_join(shp,filter(cropdata,Crop == crop),by = c("COLROW30" = "COLROW30"))
+    # valid = scennames
+    # croprast = rasterize(cropshp, refrast, field = valid, fun = mean, background = NA_real_,
+    #                      by = NULL)
+    # # croprasts[[crop]] <- croprast
+    # 
+    # breaks = seq(-100,100,20)
+    # pal = brewer.pal(n = length(breaks), name = "RdBu")
+    # tit = paste0(crop," (New Approach scaled)")
+    # breaks = c(-300,breaks,300)
+    # pal = c("#FF00FF",pal,"#00FFFF")
+    # 
+    # plotobj <- tm_shape(croprast, bbox = c(-130,160,-50,65)) + 
+    #   tm_raster(palette = pal, breaks = breaks, midpoint=0,
+    #             title = expression(paste(Delta,"Yield (%)"))) + 
+    #   tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+    #             legend.outside = T) + 
+    #   tm_layout(panel.show = T, panel.labels = scennames,
+    #             panel.label.size = 1.2,
+    #             main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+    #   tm_facets(nrow = 3, ncol = 2)
+    # print(plotobj)
   }
   
 }
+
+do.call(grid.arrange,c(plots_range,c(nrow = 1)))
+
+# Plot the estimated range of impacts
+cropregdata %>%
+  filter(Region %in% useregs) %>%
+  ggplot() + 
+  geom_line(aes(x = deltat, y = dyldmean*100, color = as.factor(RegionTemp)), size = 1.5) + 
+  xlab(expression(paste(Delta,"T (°C)"))) +
+  ylab(expression(paste(Delta,"T (pp)"))) +
+  scale_colour_discrete(name="Tmax") +
+  labs(title = crop) + ylim(-100,10)
+
 allrepdata = rbind(srrefdata,repdata)
 
-ggplot(allrepdata) + 
+allrepdata %>% 
+  filter(source != "New Approach scaled") %>% 
+  ggplot() + 
   geom_line(aes(x = deltat, y = dyld, color = Crop, linetype = source),size=2) +
-  xlim(1,6) +
+  xlim(0,10) +
   ylim(-100,10) +
   ggtitle("U.S. Area weighted impact averages", subtitle = ddversionstring)
 
 allrepdata %>% spread(source,dyld) %>% 
   mutate(error = 100.0*(`New Approach` - `SR Table A5`)/`SR Table A5`) %>%
   ggplot() + geom_line(aes(x=deltat,y=error,color=Crop),size=2) +
-  xlim(0,6) +
-  ggtitle("Error in the U.S.", subtitle = ddversionstring)
+  xlim(0,10) +
+  ggtitle("Relative error in the U.S.", subtitle = ddversionstring)
+
+allrepdata %>% spread(source,dyld) %>% 
+  mutate(error = (`New Approach` - `SR Table A5`)) %>%
+  ggplot() + geom_line(aes(x=deltat,y=error,color=Crop),size=2) +
+  xlim(0,10) +
+  ggtitle("Absolute error in the U.S.", subtitle = ddversionstring)
+
 
 # ggplot(brrepdata) + 
 #   geom_line(aes(x = deltat, y = dyld, color = Crop, linetype = source),size=2) +
@@ -360,29 +457,22 @@ bothdata %>% filter(source == "New Approach scaled") %>%
 # f1(sminscale,-0.4,sinter)
 
 
-f1 = function(minscale,slp,inter) {
-  dum = eval_dyld_countries_stepscale(cropdata,c("USA","BRA"),eddsens[[crop]],gddsens[[crop]],3,minscale,slp,inter)
-  usval = as.numeric(dum[dum$ADM0_A3 == "USA","dyld"])
-  brval = as.numeric(dum[dum$ADM0_A3 == "BRA","dyld"])
-  return(c(usval,brval,brval/usval))
-}
-
-pltfun = function(minscale,slp,inter) {
-  pdata = data.frame(tmax = seq(15,40,0.1))
-  pdata$scalesens = inter + slp*pdata$tmax
-  pdata$scalesens = pmin(1,pdata$scalesens)
-  pdata$scalesens = pmax(0,pdata$scalesens)
-  ggplot(pdata) + geom_line(aes(x=tmax,y=scalesens)) + ylim(0,1)
-}
-
-pltfun(sminscale,-0.3,5)
-
-lotmax = 20
-hitmax = 32
-minscale = 0.5
-fit=lm(scalesens~tmax,data.frame(tmax=c(lotmax,hitmax),scalesens=c(1,minscale)))
-f1(minscale,fit$coefficients[2],fit$coefficients[1])
-
+# f1 = function(minscale,slp,inter) {
+#   dum = eval_dyld_countries_stepscale(cropdata,c("USA","BRA"),eddsens[[crop]],gddsens[[crop]],3,minscale,slp,inter)
+#   usval = as.numeric(dum[dum$ADM0_A3 == "USA","dyld"])
+#   brval = as.numeric(dum[dum$ADM0_A3 == "BRA","dyld"])
+#   return(c(usval,brval,brval/usval))
+# }
+# 
+# pltfun = function(minscale,slp,inter) {
+#   pdata = data.frame(tmax = seq(15,40,0.1))
+#   pdata$scalesens = inter + slp*pdata$tmax
+#   pdata$scalesens = pmin(1,pdata$scalesens)
+#   pdata$scalesens = pmax(0,pdata$scalesens)
+#   ggplot(pdata) + geom_line(aes(x=tmax,y=scalesens)) + ylim(0,1)
+# }
+# 
+# pltfun(sminscale,-0.3,5)
 
 
 # deltats = seq(1,6)
@@ -413,20 +503,20 @@ f1(minscale,fit$coefficients[2],fit$coefficients[1])
 
 
 
-breaks = seq(-100,100,20)
-pal = brewer.pal(n = length(breaks), name = "RdBu")
-tit = crop
-breaks = c(-300,breaks,300)
-pal = c("#FF00FF",pal,"#00FFFF")
-
-plotobj <- tm_shape(croprast, bbox = c(-130,160,-50,65)) + 
-  tm_raster(palette = pal, breaks = breaks, midpoint=0,
-            title = expression(paste(Delta,"Yield (%)"))) + 
-  tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
-            legend.outside = T) + 
-  tm_layout(panel.show = T, panel.labels = scennames,
-            panel.label.size = 1.2,
-            main.title.position = "center", main.title = tit, main.title.size = 1.0) +
-  tm_facets(nrow = 3, ncol = 2)
-print(plotobj)
+# breaks = seq(-100,100,20)
+# pal = brewer.pal(n = length(breaks), name = "RdBu")
+# tit = crop
+# breaks = c(-300,breaks,300)
+# pal = c("#FF00FF",pal,"#00FFFF")
+# 
+# plotobj <- tm_shape(croprast, bbox = c(-130,160,-50,65)) + 
+#   tm_raster(palette = pal, breaks = breaks, midpoint=0,
+#             title = expression(paste(Delta,"Yield (%)"))) + 
+#   tm_legend(legend.text.size = 1.0, legend.title.size = 1.5, 
+#             legend.outside = T) + 
+#   tm_layout(panel.show = T, panel.labels = scennames,
+#             panel.label.size = 1.2,
+#             main.title.position = "center", main.title = tit, main.title.size = 1.0) +
+#   tm_facets(nrow = 3, ncol = 2)
+# print(plotobj)
 
