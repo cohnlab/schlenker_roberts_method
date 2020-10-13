@@ -15,7 +15,7 @@ ref = raster(reffname)
 shp = st_read(shpfname)
 shp = shp %>% dplyr::rename(ID = "COLROW30")
 
-pdf(file = outfname, width = 15, height = 10)
+# pdf(file = outfname, width = 15, height = 10)
 
 # Loop crops right from the start
 # crop = "Soybeans"
